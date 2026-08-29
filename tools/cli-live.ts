@@ -75,8 +75,15 @@ async function showStatus(): Promise<void> {
   );
 }
 
+/** Local-time stamp, so group names match what the Omada UI shows. */
+function stamp(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
 async function newSale(quantity: number): Promise<void> {
-  const name = `${POS_PREFIX}${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}`;
+  const name = `${POS_PREFIX}${stamp()}`;
   console.log(`\nCreating ${quantity} voucher${quantity === 1 ? '' : 's'}...`);
 
   const groupId = await cloud.createGroup({
@@ -91,14 +98,23 @@ async function newSale(quantity: number): Promise<void> {
   });
 
   const codes = await cloud.listCodes(groupId);
-  console.log(`\n${'═'.repeat(46)}`);
-  for (const v of codes) {
-    console.log(`   CODE: ${v.code}`);
-  }
-  console.log(`${'═'.repeat(46)}`);
-  console.log(`   ${SESSION_MINUTES / 60} hours of access, from first login`);
-  console.log(`   Must be used before: ${fmt(codes[0]?.endTime ?? null)}`);
-  console.log(`   group: ${name}\n`);
+  const bar = '═'.repeat(46);
+
+  console.log('');
+  console.log(bar);
+  console.log(`  SALE — ${codes.length} voucher${codes.length === 1 ? '' : 's'}`);
+  console.log(bar);
+  console.log('');
+  codes.forEach((v, i) => {
+    console.log(`   ${String(i + 1).padStart(2)}.   ${v.code}`);
+  });
+  console.log('');
+  console.log('─'.repeat(46));
+  console.log(`   Access  : ${SESSION_MINUTES / 60} hours from first login`);
+  console.log(`   Expires : ${fmt(codes[0]?.endTime ?? null)}`);
+  console.log(`   Group   : ${name}`);
+  console.log(bar);
+  console.log('');
 }
 
 async function listGroups(): Promise<void> {
@@ -162,13 +178,18 @@ async function cleanup(dryRun: boolean): Promise<void> {
 function help(): void {
   console.log(`
 Commands:
-  new sale [qty]   create qty vouchers (default 1) on the live site, 24h validity
+  voucher-sale-N   a sale for N vouchers (voucher-sale-1, voucher-sale-3, ...)
+                   2 hours of access from first login; group expires in 24h
+  new sale [qty]   same thing, older spelling
   list             every voucher group on the site, marked by owner
   status           stored vouchers vs the 5000 cap
   cleanup          show which of THIS TOOL's groups are spent (dry run)
   cleanup!         actually delete those spent groups
   help             show this
   exit             quit
+
+Expiry marks vouchers EXPIRED, it does NOT delete them -- they keep counting
+toward the 5000 cap until a group is removed, here or in the Omada UI.
 
 Your existing printed batches are legacy/permanent and are never touched.
 `);
@@ -180,6 +201,18 @@ async function run(line: string): Promise<void> {
   if (!cmd) return;
 
   try {
+    // The POS asks for a number of vouchers: voucher-sale-3 means three.
+    const sale = cmd.match(/^voucher-sale-(\d+)$/);
+    if (sale) {
+      const qty = Number(sale[1]);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 5000) {
+        console.log('Amount must be between 1 and 5000 — the Omada limit.');
+        return;
+      }
+      await newSale(qty);
+      return;
+    }
+
     switch (cmd) {
       case 'help':
         help();

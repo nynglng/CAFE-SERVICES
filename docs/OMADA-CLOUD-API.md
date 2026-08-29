@@ -18,9 +18,11 @@ and calling those same endpoints works, with no subscription.
 ## How to authenticate
 
 1. Launch Chrome with a profile that is logged into Omada Cloud
-2. Load `https://aps1-omada-cloud.tplinkcloud.com/` and **wait ~12s** — the SPA
-   establishes the controller session *after* load. Calling too early returns
-   `errorCode -1200` ("You have been logged out of the controller")
+2. Load `https://aps1-omada-cloud.tplinkcloud.com/`, then **poll until the portal
+   reports `login: true`** — the SPA establishes the controller session *after*
+   load, and how long that takes varies. Calling too early returns
+   `errorCode -1200` ("You have been logged out of the controller"). See
+   "Session lifecycle" below; a fixed wait is not reliable.
 3. Read the `csrfToken` cookie
 4. Send on every call:
    - `x-requested-with: XMLHttpRequest` — **required**, without it the server 404s
@@ -31,6 +33,36 @@ and calling those same endpoints works, with no subscription.
 bogus value behaves identically to omitting it. We do not reproduce it.
 
 Implemented in [../src/omada/session.ts](../src/omada/session.ts).
+
+## Session lifecycle (the part that bites)
+
+The session lives in a Chrome profile, never in this repo. Two things about it
+cost real time to learn:
+
+**1. `loginStatus` returns success even when nobody is logged in.**
+
+```json
+{ "errorCode": 0, "msg": "Success.",
+  "result": { "configured": true, "orgType": 20, "orgCategory": "free",
+              "login": false, "registeredRoot": true } }
+```
+
+`errorCode: 0` only means the question was answered. The real state is
+`result.login`. Checking the error code alone reports a healthy session on a
+profile that has never been signed in. Always check `result.login === true`.
+
+(`orgCategory: "free"` here is the Essentials tier confirming itself.)
+
+**2. The controller session does not survive reopening the profile.**
+
+`TPOMADA_SESSIONID` is a session cookie, so a freshly launched profile has no
+controller session and every call returns -1200 for a few seconds while the SPA
+re-establishes one. Waiting a fixed number of seconds was flaky; `open()` now
+polls `loginStatus` until `login: true`, reloading the page every few attempts
+to nudge the app along.
+
+When the cloud login itself has expired, no amount of waiting helps — run
+`npm run login`, which opens a visible window and waits for a real sign-in.
 
 ## Identifiers (this account)
 

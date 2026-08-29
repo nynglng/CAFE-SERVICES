@@ -9,6 +9,7 @@
  * Usage:  npm run discover        (Chrome must be closed)
  */
 
+import './_live-errors.ts';
 import { OmadaSession } from '../src/omada/session.ts';
 
 const session = new OmadaSession({

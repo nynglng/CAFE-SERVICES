@@ -14,6 +14,7 @@
  * Usage:  npm run live
  */
 
+import './_live-errors.ts';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { OmadaSession } from '../src/omada/session.ts';
@@ -132,10 +133,16 @@ async function cleanup(dryRun: boolean): Promise<void> {
   }
 
   // A group is spent when none of its codes are still waiting to be redeemed.
+  // Omada does flip status to 2 (expired) once the date passes -- verified
+  // against the live site -- but the expiry date is also checked so this keeps
+  // working even if that behaviour ever changes.
+  const now = Date.now();
   const spent: CloudGroup[] = [];
   for (const g of candidates) {
     const codes = await cloud.listCodes(g.id);
-    const stillUsable = codes.some((c) => c.status === 0);
+    const stillUsable = codes.some(
+      (c) => c.status === 0 && (c.endTime === null || c.endTime > now),
+    );
     if (!stillUsable) spent.push(g);
   }
 

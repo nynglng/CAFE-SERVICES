@@ -19,7 +19,10 @@
     "discover": "node --disable-warning=ExperimentalWarning tools/discover-voucher-codes.ts",
     "probe:validity": "node --disable-warning=ExperimentalWarning tools/probe-validity.ts",
     "verify:live": "node --disable-warning=ExperimentalWarning tools/verify-live.ts",
-    "live": "node --disable-warning=ExperimentalWarning tools/cli-live.ts"
+    "live": "node --disable-warning=ExperimentalWarning tools/cli-live.ts",
+    "verify:expiry": "node --disable-warning=ExperimentalWarning tools/verify-expiry-status.ts",
+    "login": "node --disable-warning=ExperimentalWarning tools/login.ts",
+    "cleanup:tests": "node --disable-warning=ExperimentalWarning tools/cleanup-test-groups.ts"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1"

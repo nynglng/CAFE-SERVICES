@@ -27,8 +27,15 @@ export type OmadaSessionOptions = {
   omadacId: string;
   /** Show the browser window. Useful when the session needs a manual login. */
   headed?: boolean;
-  /** How long to let the SPA bootstrap its controller session, in ms. */
+  /** Delay before the first readiness probe, in ms. Default 3000. */
   bootstrapMs?: number;
+  /** How long to wait for the controller to accept the session. Default 90s. */
+  readyTimeoutMs?: number;
+  /**
+   * Skip the readiness wait. Needed by the login tool, which has to open the
+   * window precisely because nobody is signed in yet.
+   */
+  skipReady?: boolean;
 };
 
 export class OmadaSessionError extends Error {
@@ -80,9 +87,60 @@ export class OmadaSession {
         /* the SPA often keeps connections open; a timeout here is not fatal */
       });
 
-    // The controller session is set up by the app after load, not by the
-    // navigation itself, so calls made too early get -1200.
-    await this.page.waitForTimeout(this.opts.bootstrapMs ?? 12_000);
+    // The controller session is established by the app after load, not by the
+    // navigation itself, and how long that takes varies a lot. Waiting a fixed
+    // time was flaky, so poll until the controller actually answers.
+    if (!this.opts.skipReady) await this.waitUntilReady();
+  }
+
+  /**
+   * Block until the controller accepts our session, or give up.
+   *
+   * A fresh browser launch has no controller session at all: TPOMADA_SESSIONID
+   * is a session cookie, so it does not survive the profile being reopened. The
+   * SPA re-establishes it a few seconds after load, and until then every call
+   * returns -1200.
+   */
+  private async waitUntilReady(): Promise<void> {
+    const page = this.page;
+    if (!page) throw new OmadaSessionError('Session is not open');
+
+    const timeoutMs =
+      this.opts.readyTimeoutMs ?? (Number(process.env.OMADA_READY_TIMEOUT_MS) || 90_000);
+    const deadline = Date.now() + timeoutMs;
+
+    // Let the app get going before the first probe.
+    await page.waitForTimeout(this.opts.bootstrapMs ?? 3_000);
+
+    let last = 'no response';
+    let attempts = 0;
+    while (Date.now() < deadline) {
+      try {
+        // errorCode 0 only means the question was answered. The portal happily
+        // reports `login: false` with a success envelope when nobody is signed
+        // in, so the payload is the thing to check, not the error code.
+        const status = (await this.request(
+          'GET',
+          '/api/v2/hotspot/loginStatus?needToken=true',
+        )) as { login?: boolean } | null;
+        if (status?.login === true) return;
+        last = 'the portal reports nobody is signed in (login: false)';
+        attempts++;
+        await page.waitForTimeout(3_000);
+        continue;
+      } catch (err) {
+        last = (err as Error).message;
+        attempts++;
+        // Passive waiting is not enough: the SPA sometimes settles without ever
+        // opening the controller. A reload restarts its bootstrap, which is what
+        // actually clears -1200 on a freshly launched profile.
+        if (attempts % 4 === 0) {
+          await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+        }
+        await page.waitForTimeout(3_000);
+      }
+    }
+    throw new OmadaLoggedOutError(last);
   }
 
   async close(): Promise<void> {

@@ -10,6 +10,7 @@
  * Usage:  npm run verify:live        (Chrome must be closed)
  */
 
+import './_live-errors.ts';
 import { OmadaSession } from '../src/omada/session.ts';
 import { OmadaCloudClient, ValidityType } from '../src/omada/cloud.ts';
 

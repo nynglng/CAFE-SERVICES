@@ -22,7 +22,8 @@
     "live": "node --disable-warning=ExperimentalWarning tools/cli-live.ts",
     "verify:expiry": "node --disable-warning=ExperimentalWarning tools/verify-expiry-status.ts",
     "login": "node --disable-warning=ExperimentalWarning tools/login.ts",
-    "cleanup:tests": "node --disable-warning=ExperimentalWarning tools/cleanup-test-groups.ts"
+    "cleanup:tests": "node --disable-warning=ExperimentalWarning tools/cleanup-test-groups.ts",
+    "verify:autocleanup": "node --disable-warning=ExperimentalWarning tools/verify-autocleanup.ts"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1"

@@ -52,6 +52,11 @@ export type CloudVoucher = {
 export type CloudGroup = {
   id: string;
   name: string;
+  /**
+   * Free text set at creation. Absent on groups made by hand in the portal,
+   * which is what lets automation tell its own groups apart from a human's.
+   */
+  description?: string;
   totalCount: number;
   unusedCount: number;
   usedCount: number;

@@ -19,14 +19,19 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { OmadaSession } from '../src/omada/session.ts';
 import { OmadaCloudClient, ValidityType } from '../src/omada/cloud.ts';
+import {
+  SERVICE_TAG,
+  POS_PREFIX,
+  ownedByService,
+  findSpentGroups,
+} from '../src/omada/housekeeping.ts';
 import type { CloudGroup } from '../src/omada/cloud.ts';
-
-/** Marks a group as created by this tool. Cleanup is limited to these. */
-const POS_PREFIX = 'POS-';
 
 /** Defaults matching how the cafe sells WiFi today. */
 const SESSION_MINUTES = 120; // access time, counted from first login
-const VALID_HOURS = 24; // window in which the code must be redeemed
+// Window in which a code must be redeemed. Overridable so the expiry and
+// cleanup behaviour can be exercised without waiting a day.
+const VALID_HOURS = Number(process.env.VOUCHER_VALID_HOURS) || 24;
 const CODE_LENGTH = 6;
 const DEVICES_PER_CODE = 1;
 
@@ -50,11 +55,6 @@ const cloud = new OmadaCloudClient(session, SITE);
 await cloud.loginStatus();
 console.log('Connected.\n');
 
-/** Groups this tool owns — the only ones cleanup may ever delete. */
-function ownedByUs(g: CloudGroup): boolean {
-  return g.name.startsWith(POS_PREFIX) && g.validityType === ValidityType.FIXED_DATES;
-}
-
 function fmt(ms: number | null): string {
   return ms === null ? 'never' : new Date(ms).toLocaleString();
 }
@@ -63,7 +63,7 @@ async function showStatus(): Promise<void> {
   const groups = await cloud.listGroups();
   const total = groups.reduce((s, g) => s + g.totalCount, 0);
   const ours = groups.filter(ownedByUs);
-  const legacy = groups.filter((g) => !ownedByUs(g));
+  const legacy = groups.filter((g) => !ownedByService(g));
   console.log(`\nStored vouchers: ${total} / 5000`);
   console.log(
     `  legacy (printed, untouched): ${legacy.length} groups, ` +
@@ -94,7 +94,7 @@ async function newSale(quantity: number): Promise<void> {
     maxUsers: DEVICES_PER_CODE,
     validityType: ValidityType.FIXED_DATES,
     expireAfterHours: VALID_HOURS,
-    description: 'Issued by cafe-voucher-service',
+    description: SERVICE_TAG,
   });
 
   const codes = await cloud.listCodes(groupId);
@@ -115,6 +115,14 @@ async function newSale(quantity: number): Promise<void> {
   console.log(`   Group   : ${name}`);
   console.log(bar);
   console.log('');
+
+  // Housekeeping happens after the codes are shown: the sale is already done,
+  // the cashier is not kept waiting, and a failure here cannot undo it.
+  try {
+    await cleanup(false, true);
+  } catch (err) {
+    console.log(`   (auto-cleanup skipped: ${(err as Error).message})`);
+  }
 }
 
 async function listGroups(): Promise<void> {
@@ -134,45 +142,40 @@ async function listGroups(): Promise<void> {
         String(g.unusedCount).padStart(7) +
         String(g.usedCount).padStart(6) +
         (g.validityType === ValidityType.FIXED_DATES ? '  expiring ' : '  permanent') +
-        (ownedByUs(g) ? '  this tool' : '  legacy (leave alone)'),
+        (ownedByService(g) ? '  this tool' : '  legacy (leave alone)'),
     );
   }
 }
 
-async function cleanup(dryRun: boolean): Promise<void> {
-  const groups = await cloud.listGroups();
-  const candidates = groups.filter(ownedByUs);
+async function cleanup(dryRun: boolean, quiet = false): Promise<void> {
+  const { candidates, spent } = await findSpentGroups(cloud);
 
   if (candidates.length === 0) {
-    console.log('\nNothing to clean: this tool has not created any groups yet.');
+    if (!quiet) console.log('Nothing to clean: this tool has not created any groups yet.');
     return;
-  }
-
-  // A group is spent when none of its codes are still waiting to be redeemed.
-  // Omada does flip status to 2 (expired) once the date passes -- verified
-  // against the live site -- but the expiry date is also checked so this keeps
-  // working even if that behaviour ever changes.
-  const now = Date.now();
-  const spent: CloudGroup[] = [];
-  for (const g of candidates) {
-    const codes = await cloud.listCodes(g.id);
-    const stillUsable = codes.some(
-      (c) => c.status === 0 && (c.endTime === null || c.endTime > now),
-    );
-    if (!stillUsable) spent.push(g);
   }
 
   if (spent.length === 0) {
-    console.log(`\nAll ${candidates.length} of this tool's groups still have unused codes.`);
+    if (!quiet) {
+      console.log(`All ${candidates.length} of this tool's groups still have unused codes.`);
+    }
     return;
   }
 
-  console.log(`\n${dryRun ? 'Would delete' : 'Deleting'} ${spent.length} spent group(s):`);
+  if (quiet) {
+    // After a sale: one line, and only when something actually happened.
+    for (const g of spent) await cloud.deleteGroup(g.id);
+    const freed = spent.reduce((n, g) => n + g.totalCount, 0);
+    console.log(`   housekeeping: removed ${spent.length} spent group(s), ${freed} slot(s) freed`);
+    return;
+  }
+
+  console.log(`${dryRun ? 'Would delete' : 'Deleting'} ${spent.length} spent group(s):`);
   for (const g of spent) {
     console.log(`   ${g.name}  (${g.totalCount} codes, ${g.usedCount} used)`);
     if (!dryRun) await cloud.deleteGroup(g.id);
   }
-  if (dryRun) console.log('\n   (dry run — nothing deleted. Run "cleanup!" to confirm.)');
+  if (dryRun) console.log('   (dry run — nothing deleted. Run "cleanup!" to confirm.)');
 }
 
 function help(): void {

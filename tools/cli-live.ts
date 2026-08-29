@@ -62,7 +62,7 @@ function fmt(ms: number | null): string {
 async function showStatus(): Promise<void> {
   const groups = await cloud.listGroups();
   const total = groups.reduce((s, g) => s + g.totalCount, 0);
-  const ours = groups.filter(ownedByUs);
+  const ours = groups.filter(ownedByService);
   const legacy = groups.filter((g) => !ownedByService(g));
   console.log(`\nStored vouchers: ${total} / 5000`);
   console.log(

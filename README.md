@@ -36,6 +36,37 @@ npm start                 # start the service on :8787
 the automatic cleanup, a Loyverse receipt (delivered twice, as Loyverse does),
 and an internet outage.
 
+## Running the LIVE tools on a different machine
+
+The simulator above needs nothing but Node. The tools that talk to the real
+Omada Cloud site need two more things, and neither travels with the repo:
+
+1. **`npm install`** — the live tools drive a browser via `playwright-core`.
+2. **A Chrome profile that is logged into Omada Cloud.** The session lives in
+   that profile, not in this repo, so on a new machine you must log in once by
+   hand. Nothing is stored in git, by design.
+
+Point the tools at that machine's paths with environment variables (defaults
+assume the original workstation's layout):
+
+```bash
+CHROME_PROFILE="C:/path/to/a/chrome-profile"
+CHROME_EXE="C:/Program Files/Google/Chrome/Application/chrome.exe"
+OMADA_SITE_ID=<omada-site-id>     # optional, defaults to the cafe site
+HEADED=1                                    # show the window, e.g. to log in
+```
+
+First run on a new machine:
+
+```bash
+npm install
+HEADED=1 npm run live      # log into Omada in the window that opens, then use it
+```
+
+Live commands: `npm run live` (issue real vouchers), `npm run verify:live`
+(prove create → read → expire → delete still works), `npm run capture`
+(re-record the portal's API if TP-Link changes it).
+
 ## What the POS calls
 
 One endpoint does the work.

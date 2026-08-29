@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { createConnection } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import type { Slip } from './slip.ts';
 import { toEscPos } from './slip.ts';
@@ -15,10 +16,8 @@ import { toEscPos } from './slip.ts';
  * it in the response, so a printer problem is logged, not thrown.
  */
 
-const logPath = new URL('../../data/print-log.txt', import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  '$1',
-);
+// fileURLToPath, not .pathname — see the note in store/ledger.ts.
+const logPath = fileURLToPath(new URL('../../data/print-log.txt', import.meta.url));
 
 export type PrintResult = { printed: boolean; target: string; error?: string };
 

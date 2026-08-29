@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Issuance, Voucher } from '../types.ts';
 
 /**
@@ -18,9 +19,10 @@ type LedgerFile = {
 };
 
 /** LEDGER_PATH lets tests (and a second site on one box) use their own file. */
+// fileURLToPath, not .pathname: .pathname percent-encodes spaces, so a folder
+// like "CAFE SERVICES" silently becomes a separate "CAFE%20SERVICES" directory.
 const dataPath =
-  process.env.LEDGER_PATH ??
-  new URL('../../data/ledger.json', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  process.env.LEDGER_PATH ?? fileURLToPath(new URL('../../data/ledger.json', import.meta.url));
 
 let state: LedgerFile = { issuances: [], pool: [] };
 let dirty = false;

@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Site, Plan } from './types.ts';
 
 /** Minimal .env reader — avoids a dependency for six settings. */
@@ -15,7 +16,9 @@ function loadDotenv(path: string): void {
   }
 }
 
-loadDotenv(new URL('../.env', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+// fileURLToPath, not .pathname: .pathname percent-encodes spaces, so on a path
+// like "CAFE SERVICES" the .env file was silently never found.
+loadDotenv(fileURLToPath(new URL('../.env', import.meta.url)));
 
 function env(key: string, fallback: string): string {
   const v = process.env[key];

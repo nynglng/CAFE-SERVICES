@@ -13,6 +13,13 @@
     "demo": "node --disable-warning=ExperimentalWarning scripts/demo.ts",
     "test": "node --disable-warning=ExperimentalWarning --test",
     "typecheck": "tsc --noEmit",
-    "cli": "node --disable-warning=ExperimentalWarning scripts/cli.ts"
+    "cli": "node --disable-warning=ExperimentalWarning scripts/cli.ts",
+    "capture": "node --disable-warning=ExperimentalWarning tools/capture-omada-api.ts",
+    "probe": "node --disable-warning=ExperimentalWarning tools/probe-omada-auth.ts",
+    "discover": "node --disable-warning=ExperimentalWarning tools/discover-voucher-codes.ts",
+    "probe:validity": "node --disable-warning=ExperimentalWarning tools/probe-validity.ts"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
   }
 }

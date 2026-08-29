@@ -1,0 +1,18 @@
+{
+  "name": "cafe-voucher-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Voucher issuing middleware between a POS (Loyverse) and TP-Link Omada hotspot vouchers.",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/index.ts",
+    "demo": "node --disable-warning=ExperimentalWarning scripts/demo.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test",
+    "typecheck": "tsc --noEmit",
+    "cli": "node --disable-warning=ExperimentalWarning scripts/cli.ts"
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "sites": [
+    {
+      "id": "cafe-one",
+      "name": "Client 1 - Cafe",
+      "omadaSiteId": "REPLACE_WITH_OMADA_SITE_ID",
+      "ssid": "CafeOne_WiFi",
+      "voucherCap": 5000,
+      "portalUrl": "http://wifi.local",
+      "plans": [
+        {
+          "id": "1h",
+          "name": "WiFi 1 Hour",
+          "durationMinutes": 60,
+          "downKbps": 5000,
+          "upKbps": 2000,
+          "deviceLimit": 1,
+          "priceMinor": 2000,
+          "currency": "PHP",
+          "codeLength": 8,
+          "unusedValidDays": 7,
+          "poolTarget": 8,
+          "loyverseSkus": [
+            "WIFI-1H"
+          ]
+        },
+        {
+          "id": "3h",
+          "name": "WiFi 3 Hours",
+          "durationMinutes": 180,
+          "downKbps": 5000,
+          "upKbps": 2000,
+          "deviceLimit": 1,
+          "priceMinor": 5000,
+          "currency": "PHP",
+          "codeLength": 8,
+          "unusedValidDays": 7,
+          "poolTarget": 5,
+          "loyverseSkus": [
+            "WIFI-3H"
+          ]
+        },
+        {
+          "id": "1d",
+          "name": "WiFi Whole Day",
+          "durationMinutes": 1440,
+          "downKbps": 8000,
+          "upKbps": 4000,
+          "deviceLimit": 2,
+          "priceMinor": 10000,
+          "currency": "PHP",
+          "codeLength": 8,
+          "unusedValidDays": 14,
+          "poolTarget": 3,
+          "loyverseSkus": [
+            "WIFI-1D"
+          ]
+        }
+      ],
+      "loyverseStoreId": "REPLACE_WITH_LOYVERSE_STORE_ID"
+    },
+    {
+      "id": "cafe-two",
+      "name": "Client 2 - Cafe",
+      "omadaSiteId": "REPLACE_WITH_OMADA_SITE_ID",
+      "ssid": "CafeTwo_WiFi",
+      "voucherCap": 5000,
+      "portalUrl": "http://wifi.local",
+      "plans": [
+        {
+          "id": "2h",
+          "name": "WiFi 2 Hours",
+          "durationMinutes": 120,
+          "downKbps": 6000,
+          "upKbps": 3000,
+          "deviceLimit": 1,
+          "priceMinor": 3000,
+          "currency": "PHP",
+          "codeLength": 6,
+          "unusedValidDays": 7,
+          "poolTarget": 6,
+          "loyverseSkus": [
+            "WIFI-2H"
+          ]
+        },
+        {
+          "id": "1d",
+          "name": "WiFi Whole Day",
+          "durationMinutes": 1440,
+          "downKbps": 8000,
+          "upKbps": 4000,
+          "deviceLimit": 2,
+          "priceMinor": 9000,
+          "currency": "PHP",
+          "codeLength": 6,
+          "unusedValidDays": 14,
+          "poolTarget": 3,
+          "loyverseSkus": [
+            "WIFI-1D"
+          ]
+        }
+      ],
+      "loyverseStoreId": "REPLACE_WITH_LOYVERSE_STORE_ID"
+    }
+  ]
+}

@@ -18,7 +18,8 @@
     "probe": "node --disable-warning=ExperimentalWarning tools/probe-omada-auth.ts",
     "discover": "node --disable-warning=ExperimentalWarning tools/discover-voucher-codes.ts",
     "probe:validity": "node --disable-warning=ExperimentalWarning tools/probe-validity.ts",
-    "verify:live": "node --disable-warning=ExperimentalWarning tools/verify-live.ts"
+    "verify:live": "node --disable-warning=ExperimentalWarning tools/verify-live.ts",
+    "live": "node --disable-warning=ExperimentalWarning tools/cli-live.ts"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1"

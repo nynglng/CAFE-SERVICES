@@ -252,12 +252,17 @@ const rl = createInterface({ input: stdin, output: stdout, prompt: '> ' });
 // piped/EOF input can emit 'close' before a command finishes running. Chain
 // every command onto one queue so order and completion are both guaranteed.
 let queue: Promise<void> = Promise.resolve();
+let closed = false;
 
 rl.prompt();
 rl.on('line', (line) => {
-  queue = queue.then(() => run(line)).then(() => rl.prompt());
+  queue = queue.then(() => run(line)).then(() => {
+    // Piped input closes the stream mid-queue; prompting then throws.
+    if (!closed) rl.prompt();
+  });
 });
 rl.on('close', () => {
+  closed = true;
   queue
     .then(() => ledger.save())
     .then(() => process.exit(0));

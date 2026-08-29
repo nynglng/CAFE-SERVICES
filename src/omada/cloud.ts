@@ -74,9 +74,15 @@ export type CreateGroupInput = {
   /**
    * With FIXED_DATES, how many days unused codes stay redeemable. Day 0 is
    * today, so 1 means "usable today and tomorrow" — matching how the portal's
-   * date pickers behave.
+   * date pickers behave. Ignored when `expireAfterHours` is given.
    */
   expireAfterDays?: number;
+  /**
+   * With FIXED_DATES, expire exactly this many hours from now. The portal's
+   * own pickers are day-granular, but the field is epoch milliseconds and the
+   * controller accepts finer precision.
+   */
+  expireAfterHours?: number;
   portalIds?: string[];
 };
 
@@ -236,10 +242,13 @@ export class OmadaCloudClient {
       body.portalIds = input.portalIds;
     }
     if (fixedDates) {
-      // Absolute epoch-ms bounds, exactly as the portal's date pickers send
-      // them: effective from the start of today, dead at end of the last day.
+      // Absolute epoch-ms bounds. The portal's date pickers send start-of-day
+      // to end-of-day; an explicit hour window is honoured too.
       body.effectiveTime = startOfDay(0);
-      body.expirationTime = endOfDay(input.expireAfterDays ?? 1);
+      body.expirationTime =
+        input.expireAfterHours !== undefined
+          ? Date.now() + input.expireAfterHours * 3_600_000
+          : endOfDay(input.expireAfterDays ?? 1);
     }
 
     const result = (await this.session.post(`${this.base()}/voucherGroups`, body)) as {

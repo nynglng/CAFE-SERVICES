@@ -13,7 +13,7 @@ import java.util.List;
  * Draws a receipt the way Loyverse's own graphic mode draws it.
  *
  * The gateway is handed text and has to emit a picture, and the two modes wrap
- * differently - text at 48 characters, graphics at a pixel width - so the rows
+ * differently - text at 32 characters, graphics at a pixel width - so the rows
  * cannot simply be copied onto a canvas. Names are rebuilt by the parser and
  * re-wrapped here against the real column width.
  *
@@ -24,7 +24,7 @@ import java.util.List;
  *   paper            384px wide, 58mm at 203dpi
  *   left margin      x = 2
  *   amounts          right-aligned to x = 382, ink starting at x = 295
- *   name column      wraps at x = 287
+ *   name column      wraps at x = 291 (bracketed to 286..297)
  *   body text        17px tall, 23px with descenders
  *   total row        26px, bold
  *   dividers         dotted, 2-3px tall, full width
@@ -124,18 +124,19 @@ public final class ReceiptRenderer {
      * Report how wide our type is against known measurements from a real
      * print, so the size can be corrected when it drifts.
      *
-     * References taken from the captured print: the long unbroken name is
-     * 473px at 41 characters, and "...be a better person to" is 443px. Both
-     * should land within a pixel or two of the numbers logged here.
+     * References re-measured at 58mm with tools/measure-capture.mjs, which
+     * reports where Loyverse's own ink actually falls. The earlier numbers
+     * came from an 80mm capture and cited strings long enough that they cannot
+     * appear unbroken on this paper at all.
+     *
+     * Ink extent is not identical to measureText - side bearings differ - so
+     * a couple of pixels out is fine. Tens of pixels means the type has moved.
      */
     private static void calibrate(Paint text) {
         android.util.Log.i(PrintServerService.TAG, "type check:"
                 + " size=" + text.getTextSize()
-                + " long39=" + text.measureText("longname longname be a better person to")
-                + " (real 443)"
-                + " long42=" + text.measureText("longname longname be a better person to be")
-                + " jv41=" + text.measureText("jvjevjxekxkxkrbckebkxbskcsbksbcksbckrbxkt") + " (real 473)"
-                + " jv42=" + text.measureText("jvjevjxekxkxkrbckebkxbskcsbksbcksbckrbxktb"));
+                + " upper15=" + text.measureText("CAFE STORE NAME") + " (real 197)"
+                + " upper22=" + text.measureText("ABCDEFGHIJKLMNOPQRSTUV") + " (real 286)");
     }
 
     // --- layout ------------------------------------------------------------

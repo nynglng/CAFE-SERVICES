@@ -73,7 +73,7 @@ public final class VoucherRenderer {
         boolean many = codes.size() > 1;
         String validity = "Valid for " + hours + (hours == 1 ? " hour" : " hours");
         String network = "Wi-Fi Name: " + ssid;
-        String expiry = "Will expire after 24 hours.";
+        String expiry = "WILL EXPIRE AFTER 24 HOURS";
 
         int perVoucher = PAD_TOP
                 + (many ? AFTER_COUNT : 0)

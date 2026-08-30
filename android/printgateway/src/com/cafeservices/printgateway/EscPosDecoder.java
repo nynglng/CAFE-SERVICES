@@ -222,7 +222,7 @@ public final class EscPosDecoder {
             if ((b & 0xFF) == 0x7F) {
                 // Loyverse emits 0x7F where the peso sign should be: its code
                 // page has no glyph for it. It still OCCUPIES A COLUMN on the
-                // paper, and the whole 48-column layout is measured with it in
+                // paper, and the whole 32-column layout is measured with it in
                 // place, so it becomes a space rather than being dropped.
                 current.write(0x20);
                 i++;

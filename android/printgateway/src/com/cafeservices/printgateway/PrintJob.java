@@ -61,11 +61,17 @@ public final class PrintJob {
         Bitmap top = ReceiptRenderer.render(plan, receipt,
                 MainActivity.storeHeader(receipt));
         Bitmap bottom = plan.printVoucher
-                ? VoucherRenderer.render(codes(plan), MainActivity.SSID,
-                        MainActivity.ACCESS_HOURS)
+                ? VoucherRenderer.render(codes(plan), Settings.ssid(),
+                        Settings.accessHours(), Settings.expiryHours())
                 : null;
         replicaBitmap = stack(top, bottom);
         return replicaBitmap;
+    }
+
+    /** Drop the drawn copy so a settings change shows up on an old job. */
+    public void forgetReplica() {
+        replicaAttempted = false;
+        replicaBitmap = null;
     }
 
     /**

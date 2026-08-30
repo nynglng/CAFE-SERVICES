@@ -68,6 +68,9 @@ public class PrintServerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // The service draws replicas of its own, and can be restarted by the
+        // system without the activity, so it loads the settings itself.
+        Settings.init(this);
         if (running) {
             return START_STICKY;
         }

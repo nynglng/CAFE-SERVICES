@@ -55,12 +55,28 @@ public final class VoucherRenderer {
         return p;
     }
 
+    /** "Valid for 2 hours" - access time, counted from first login. */
+    public static String validityLine(int accessHours) {
+        return "Valid for " + accessHours + (accessHours == 1 ? " hour" : " hours");
+    }
+
     /**
-     * @param codes one entry per voucher sold
-     * @param ssid  the network name a guest should join
-     * @param hours access time, counted from first login
+     * "WILL EXPIRE AFTER 24 HOURS" - the deadline for redeeming the code at
+     * all, which is a different clock from the access time above and the one
+     * customers lose money on, hence the shout.
      */
-    public static Bitmap render(List<String> codes, String ssid, int hours) {
+    public static String expiryLine(int expiryHours) {
+        return "WILL EXPIRE AFTER " + expiryHours + (expiryHours == 1 ? " HOUR" : " HOURS");
+    }
+
+    /**
+     * @param codes        one entry per voucher sold
+     * @param ssid         the network name a guest should join
+     * @param accessHours  access time, counted from first login
+     * @param expiryHours  how long an unredeemed code stays alive
+     */
+    public static Bitmap render(List<String> codes, String ssid, int accessHours,
+                                int expiryHours) {
         if (codes.isEmpty()) {
             return null;
         }
@@ -71,9 +87,9 @@ public final class VoucherRenderer {
         Paint count = paint(COUNT_SIZE, false);
 
         boolean many = codes.size() > 1;
-        String validity = "Valid for " + hours + (hours == 1 ? " hour" : " hours");
+        String validity = validityLine(accessHours);
         String network = "Wi-Fi Name: " + ssid;
-        String expiry = "WILL EXPIRE AFTER 24 HOURS";
+        String expiry = expiryLine(expiryHours);
 
         int perVoucher = PAD_TOP
                 + (many ? AFTER_COUNT : 0)

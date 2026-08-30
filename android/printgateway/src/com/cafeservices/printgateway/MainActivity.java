@@ -30,9 +30,7 @@ public class MainActivity extends Activity {
     /** The client's 58mm paper is 32 characters, which Loyverse formats to. */
     private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
 
-    /** Shown on the voucher slip. Will move into settings. */
-    static final String SSID = "CAFE";
-    static final int ACCESS_HOURS = 2;
+    private static final int MENU_SETTINGS = 1;
 
     private TextView statusLine;
     private TextView addressLine;
@@ -54,6 +52,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Settings.init(this);
         setContentView(R.layout.activity_main);
 
         statusLine = (TextView) findViewById(R.id.statusLine);
@@ -97,6 +96,38 @@ public class MainActivity extends Activity {
         } else {
             startService(intent);
         }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(android.view.Menu menu) {
+        menu.add(0, MENU_SETTINGS, 0, "Settings")
+                .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(android.view.MenuItem item) {
+        if (item.getItemId() != MENU_SETTINGS) {
+            return super.onOptionsItemSelected(item);
+        }
+        SettingsDialog.show(this, new Runnable() {
+            @Override
+            public void run() {
+                // Jobs already on screen were drawn with the old wording, so
+                // they are redrawn: the point of changing a setting is seeing
+                // what it does to the slip.
+                for (PrintJob job : PrintServerService.jobs()) {
+                    job.forgetReplica();
+                }
+                render();
+                android.widget.Toast.makeText(MainActivity.this,
+                        "Saved. " + Settings.ssid() + ", valid "
+                                + Settings.accessHours() + "h, expires in "
+                                + Settings.expiryHours() + "h",
+                        android.widget.Toast.LENGTH_LONG).show();
+            }
+        });
+        return true;
     }
 
     @Override

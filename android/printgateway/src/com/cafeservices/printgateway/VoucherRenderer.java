@@ -6,16 +6,24 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Draws the voucher slip, in the same graphic mode as the receipt above it.
  *
- * Typography is the receipt's, not its own. Everything is set at the receipt's
- * body size except the code itself, which uses the bold size the receipt gives
- * its total - the one place that page already shouts. Reusing those two sizes
- * keeps receipt and voucher reading as a single printout, and means a change to
- * the receipt's type carries here automatically.
+ * One slip, however many codes were sold: a heading, the codes listed under it,
+ * and the terms stated once at the foot. Repeating the network and the times
+ * beside every code padded the paper out and invited the reader to look for a
+ * difference between blocks that was never there.
+ *
+ * Each code is flanked by dashes so a handwritten-looking string of digits
+ * reads as a code to be typed, and so two codes cannot run together.
+ *
+ * Typography is the receipt's, not its own: the heading and codes take the bold
+ * size the receipt gives its total - the one place that page already shouts -
+ * and everything else its body size. A change to the receipt's type carries
+ * here automatically.
  *
  * Widths are pixels, matching ReceiptRenderer: 58mm paper at 203dpi.
  */
@@ -23,24 +31,20 @@ public final class VoucherRenderer {
 
     private static final int PAPER_WIDTH = ReceiptRenderer.PAPER_WIDTH;
 
-    private static final float LABEL_SIZE = ReceiptRenderer.BODY_SIZE;
+    private static final float TITLE_SIZE = ReceiptRenderer.TOTAL_SIZE;
     private static final float CODE_SIZE = ReceiptRenderer.TOTAL_SIZE;
     private static final float DETAIL_SIZE = ReceiptRenderer.BODY_SIZE;
-    private static final float COUNT_SIZE = ReceiptRenderer.BODY_SIZE;
 
     /**
-     * Vertical room around each part, in the order they are drawn. Each is the
-     * step to the next line, so it has to clear the type it follows. These are
-     * the receipt's own pitches: body lines step by PITCH_WRAPPED, the bold
-     * code gets the wider PITCH_TO_QUANTITY, and one voucher is separated from
-     * the next by PITCH_BETWEEN_ITEMS, exactly as two items are on the receipt.
+     * Vertical steps, in the order they are drawn. Each has to clear the type
+     * it follows, so the two large rows step by the receipt's wider pitch and
+     * the body rows by its narrow one.
      */
     private static final int PAD_TOP = ReceiptRenderer.PITCH_WRAPPED;
-    private static final int AFTER_COUNT = ReceiptRenderer.PITCH_WRAPPED;
-    private static final int AFTER_LABEL = ReceiptRenderer.PITCH_TO_QUANTITY;
-    private static final int AFTER_CODE = ReceiptRenderer.PITCH_BETWEEN_ITEMS;
+    private static final int AFTER_TITLE = ReceiptRenderer.PITCH_TO_QUANTITY;
+    private static final int CODE_PITCH = ReceiptRenderer.PITCH_TO_QUANTITY;
+    private static final int AFTER_CODES = ReceiptRenderer.PITCH_TO_QUANTITY;
     private static final int DETAIL_PITCH = ReceiptRenderer.PITCH_WRAPPED;
-    private static final int GAP_BETWEEN_VOUCHERS = ReceiptRenderer.PITCH_BETWEEN_ITEMS;
     private static final int PAD_BOTTOM = ReceiptRenderer.PITCH_WRAPPED;
 
     private VoucherRenderer() {
@@ -53,6 +57,11 @@ public final class VoucherRenderer {
         p.setTypeface(Typeface.create(Typeface.SANS_SERIF,
                 bold ? Typeface.BOLD : Typeface.NORMAL));
         return p;
+    }
+
+    /** Reads as one slip whether it carries one code or five. */
+    public static String title() {
+        return "WiFi VOUCHER/S";
     }
 
     /** "Valid for 2 hours" - access time, counted from first login. */
@@ -81,52 +90,36 @@ public final class VoucherRenderer {
             return null;
         }
 
-        Paint label = paint(LABEL_SIZE, false);
-        Paint code = paint(CODE_SIZE, true);
-        Paint detail = paint(DETAIL_SIZE, false);
-        Paint count = paint(COUNT_SIZE, false);
+        Paint titlePaint = paint(TITLE_SIZE, true);
+        Paint codePaint = paint(CODE_SIZE, false);
+        Paint detailPaint = paint(DETAIL_SIZE, false);
 
-        boolean many = codes.size() > 1;
-        String validity = validityLine(accessHours);
-        String network = "Wi-Fi Name: " + ssid;
-        String expiry = expiryLine(expiryHours);
+        List<String> details = new ArrayList<String>();
+        details.add("Wi-Fi Name: " + ssid);
+        details.add(validityLine(accessHours));
+        details.add(expiryLine(expiryHours));
 
-        int perVoucher = PAD_TOP
-                + (many ? AFTER_COUNT : 0)
-                + AFTER_LABEL
-                + AFTER_CODE
-                + DETAIL_PITCH * 3
+        int height = PAD_TOP
+                + AFTER_TITLE
+                + CODE_PITCH * (codes.size() - 1)
+                + AFTER_CODES
+                + DETAIL_PITCH * details.size()
                 + PAD_BOTTOM;
-        int height = perVoucher * codes.size()
-                + GAP_BETWEEN_VOUCHERS * (codes.size() - 1);
 
         Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = 0;
+        int y = PAD_TOP;
+        centre(canvas, title(), y, titlePaint);
+        y += AFTER_TITLE;
         for (int i = 0; i < codes.size(); i++) {
-            if (i > 0) {
-                // A rule between vouchers, so two codes on one strip of paper
-                // cannot be mistaken for one voucher with a stray number on it.
-                rule(canvas, y + GAP_BETWEEN_VOUCHERS / 2);
-                y += GAP_BETWEEN_VOUCHERS;
-            }
-            y += PAD_TOP;
-            if (many) {
-                centre(canvas, "Voucher " + (i + 1) + " of " + codes.size(), y, count);
-                y += AFTER_COUNT;
-            }
-            centre(canvas, "VOUCHER CODE:", y, label);
-            y += AFTER_LABEL;
-            centre(canvas, codes.get(i), y, code);
-            y += AFTER_CODE;
-            centre(canvas, validity, y, detail);
+            centre(canvas, "--- " + codes.get(i) + " ---", y, codePaint);
+            y += (i == codes.size() - 1) ? AFTER_CODES : CODE_PITCH;
+        }
+        for (String detail : details) {
+            centre(canvas, detail, y, detailPaint);
             y += DETAIL_PITCH;
-            centre(canvas, network, y, detail);
-            y += DETAIL_PITCH;
-            centre(canvas, expiry, y, detail);
-            y += DETAIL_PITCH + PAD_BOTTOM;
         }
         return bitmap;
     }
@@ -135,13 +128,5 @@ public final class VoucherRenderer {
     private static void centre(Canvas canvas, String text, int y, Paint p) {
         float w = p.measureText(text);
         canvas.drawText(text, (PAPER_WIDTH - w) / 2f, y + p.getTextSize(), p);
-    }
-
-    private static void rule(Canvas canvas, int y) {
-        Paint p = new Paint();
-        p.setColor(Color.BLACK);
-        for (int x = 2; x <= PAPER_WIDTH - 2; x += 8) {
-            canvas.drawRect(x, y, x + 3, y + 2, p);
-        }
     }
 }

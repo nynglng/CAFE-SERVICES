@@ -20,6 +20,8 @@ public final class PrintJob {
 
     private Bitmap rendered;
     private boolean renderAttempted;
+    private Bitmap replicaBitmap;
+    private boolean replicaAttempted;
 
     /** The printed image, or null if this job was plain text. */
     public Bitmap bitmap() {
@@ -32,6 +34,32 @@ public final class PrintJob {
 
     public boolean hasImage() {
         return !decoded.rasters.isEmpty();
+    }
+
+    /**
+     * The receipt redrawn the way Loyverse's graphic mode would have drawn it.
+     *
+     * Loyverse sends us text, but the paper is meant to carry a picture, so
+     * this - not the incoming stream - is what the printer will eventually be
+     * handed, and therefore what the screen should be showing. Null when the
+     * job is already an image, carries no items, or is a voucher-only sale
+     * with no receipt to print.
+     */
+    public Bitmap replica() {
+        if (replicaAttempted) {
+            return replicaBitmap;
+        }
+        replicaAttempted = true;
+        if (hasImage()) {
+            return null;
+        }
+        ReceiptParser.Receipt receipt = ReceiptParser.parse(decoded);
+        if (receipt.items.isEmpty()) {
+            return null;
+        }
+        replicaBitmap = ReceiptRenderer.render(SalePlan.from(receipt), receipt,
+                MainActivity.storeHeader(receipt));
+        return replicaBitmap;
     }
 
     public PrintJob(String source, String dialled, byte[] raw) {

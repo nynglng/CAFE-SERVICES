@@ -199,13 +199,7 @@ public class PrintServerService extends Service {
             return;
         }
         try {
-            ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
-            if (receipt.items.isEmpty()) {
-                return;
-            }
-            SalePlan plan = SalePlan.from(receipt);
-            android.graphics.Bitmap bitmap =
-                    ReceiptRenderer.render(plan, receipt, MainActivity.storeHeader(receipt));
+            android.graphics.Bitmap bitmap = job.replica();
             if (bitmap == null) {
                 return;
             }

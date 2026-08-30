@@ -134,9 +134,19 @@ public class MainActivity extends Activity {
 
         List<PrintJob> jobs = PrintServerService.jobs();
 
-        // Loyverse renders receipts as a bitmap, so for those the picture is
-        // the only representation there is. Show the newest one full size.
-        Bitmap newest = jobs.isEmpty() ? null : jobs.get(0).bitmap();
+        // Show the newest job as a picture, full size. A text-mode sale is
+        // redrawn as the graphic receipt the printer will actually be handed,
+        // which is the thing worth looking at; only when there is no replica
+        // to draw - an image job, or a voucher-only sale - do we fall back to
+        // the raster that arrived.
+        Bitmap newest = null;
+        if (!jobs.isEmpty()) {
+            PrintJob top = jobs.get(0);
+            newest = top.replica();
+            if (newest == null) {
+                newest = top.bitmap();
+            }
+        }
         if (newest != null) {
             receiptImage.setImageBitmap(newest);
             receiptImage.setVisibility(View.VISIBLE);

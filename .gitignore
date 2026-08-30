@@ -7,3 +7,6 @@ data/*.json
 android/**/build/
 android/**/debug.keystore
 *.apk
+
+# Captured print streams: real receipts, kept out of git
+*.bin

@@ -62,9 +62,12 @@ public final class ReceiptParser {
     private static final Pattern ITEM =
             Pattern.compile("^(\\S.*?)\\s\\s+([0-9,]+\\.[0-9]{2})\\s*$");
 
-    /** " 1 x   170.00" - the quantity row belonging to the item above. */
+    /**
+     * " 2 x   200.00" - the quantity row belonging to the item above,
+     * carrying the count and the PER-UNIT price.
+     */
     private static final Pattern QUANTITY =
-            Pattern.compile("^\\s*([0-9]+(?:\\.[0-9]+)?)\\s*x\\s");
+            Pattern.compile("^\\s*([0-9]+(?:\\.[0-9]+)?)\\s*x\\s+([0-9,]+\\.[0-9]{2})");
 
     /** "#1-0007" on the footer row. */
     private static final Pattern RECEIPT_NUMBER = Pattern.compile("#\\d+-\\d+");
@@ -72,12 +75,21 @@ public final class ReceiptParser {
     public static final class Item {
         public final String name;
         public final double quantity;
+        /** The line total, printed beside the name. */
         public final String amount;
+        /**
+         * The per-unit price, which Loyverse prints on the quantity row:
+         * "2 x P200.00" against a line total of P400.00. The two differ
+         * whenever more than one is sold, so a quantity row built from
+         * `amount` misprices every multi-quantity line.
+         */
+        public final String unitAmount;
 
-        Item(String name, double quantity, String amount) {
+        Item(String name, double quantity, String amount, String unitAmount) {
             this.name = name;
             this.quantity = quantity;
             this.amount = amount;
+            this.unitAmount = unitAmount;
         }
 
         public int wholeQuantity() {
@@ -158,7 +170,10 @@ public final class ReceiptParser {
             } catch (NumberFormatException e) {
                 continue;
             }
-            receipt.items.add(new Item(name, count, amount));
+            // Older captures may lack the price on the quantity row; falling
+            // back to the line total keeps a single-quantity item correct.
+            String unit = quantity.group(2) != null ? quantity.group(2) : amount;
+            receipt.items.add(new Item(name, count, amount, unit));
             i = j;
         }
 

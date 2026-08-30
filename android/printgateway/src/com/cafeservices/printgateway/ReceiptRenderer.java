@@ -136,7 +136,7 @@ public final class ReceiptRenderer {
         android.util.Log.i(PrintServerService.TAG, "type check:"
                 + " size=" + text.getTextSize()
                 + " upper15=" + text.measureText("CAFE STORE NAME") + " (real 197)"
-                + " upper22=" + text.measureText("ABCDEFGHIJKLMNOPQRSTUV") + " (real 286)");
+                + " upper19=" + text.measureText("ABCDEFGHIJKLMNOPQRS") + " (real 286)");
     }
 
     // --- layout ------------------------------------------------------------
@@ -235,7 +235,7 @@ public final class ReceiptRenderer {
                 y += PITCH_WRAPPED;
             }
             Row qty = new Row();
-            qty.left = item.wholeQuantity() + " x " + PESO + item.amount;
+            qty.left = item.wholeQuantity() + " x " + PESO + item.unitAmount;
             qty.y = y - PITCH_WRAPPED + PITCH_TO_QUANTITY;
             blocks.add(qty);
             y = qty.y + PITCH_BETWEEN_ITEMS;

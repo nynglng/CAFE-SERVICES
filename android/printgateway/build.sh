@@ -14,8 +14,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
 SDK="${ANDROID_SDK:-$LOCALAPPDATA/Android/Sdk}"
-BUILD_TOOLS_VERSION="${BUILD_TOOLS_VERSION:-36.1.0}"
-PLATFORM="${PLATFORM:-android-36}"
+
+# Take the newest build-tools and platform actually installed rather than
+# pinning versions. A pinned pair fails on any machine whose SDK Manager
+# offered something else, which is every fresh install a year later.
+newest() { ls -1 "$1" 2>/dev/null | sort -V | tail -1; }
+BUILD_TOOLS_VERSION="${BUILD_TOOLS_VERSION:-$(newest "$SDK/build-tools")}"
+PLATFORM="${PLATFORM:-$(newest "$SDK/platforms")}"
 JAVA_HOME_DIR="${JAVA_HOME:-/c/Program Files/Android/Android Studio/jbr}"
 
 # d8 and apksigner are .bat wrappers that look up JAVA_HOME themselves,

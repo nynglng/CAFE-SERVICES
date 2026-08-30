@@ -1,4 +1,4 @@
-# Handoff — 30 August 2026
+# Handoff — 30 August 2026 (updated after the 58mm recalibration)
 
 Where the project stands, so work can resume on another machine without
 re-deriving any of it.
@@ -67,27 +67,59 @@ The flow: `EscPosDecoder` → `ReceiptParser` → `SalePlan` → `ReceiptRendere
 with other items → receipt (WiFi line removed) then voucher; no WiFi → receipt
 untouched.
 
-`ReceiptRenderer` redraws the receipt as a pixel-faithful replica of Loyverse's
-own graphic mode. Every constant in it was measured off a real capture, not
-chosen by eye; `NAME_COLUMN_RIGHT = 478` was pinned by four constraints that
-left a two-pixel window. `calibrate()` logs our type widths against known real
-values so drift can be caught. If Loyverse changes its font, that log is the
-first place to look.
+`ReceiptRenderer` **replays every row Loyverse sent, in order**. It used to
+rebuild the page from recognised pieces and silently dropped the rest — on a
+real café sale that lost the PWD discount, the Card payment, "Dine in" and the
+address, leaving items totalling 800 against a printed total of 770. Anything
+unrecognised now survives by default. Do not go back to a whitelist.
 
-Two details that silently corrupt everything if got wrong, both documented at
+Item names are the one deliberate exception: Loyverse breaks them at its
+22-character text field, graphic mode breaks on pixels and lands elsewhere, so
+`ReceiptParser.Item` records the rows each item occupies and the renderer
+substitutes the rejoined name re-wrapped against `NAME_COLUMN_RIGHT`. Verified:
+the rewrap lands on the same 19-character break as Loyverse's own output.
+
+Alignment is decided by what a value **is** — only an amount or the receipt
+number is pinned right. Rows arrive already trimmed, so trailing padding cannot
+be consulted; splitting on any wide gap threw "POS: POS 1" to opposite edges.
+
+`calibrate()` logs our type widths against real measurements. It currently
+reads `upper15=200 (real 197)` and `upper19=287 (real 286)` — within a pixel or
+three, so our type matches Loyverse's. If it ever drifts far, that log is the
+first place to look. Note the references must cite strings that can actually
+appear unbroken on 58mm paper; an earlier pair came from an 80mm capture and
+made the type look 46px too wide when nothing was wrong.
+
+Three details that silently corrupt everything if got wrong, all documented at
 their call sites:
 
 - Loyverse sends `0x7F` where `₱` belongs. It **occupies a print column**, so
   it becomes a space — never dropped, or every following character shifts.
+  `ReceiptRenderer.restorePeso` puts the symbol back at that exact space.
 - A wrapped item name rejoins with a space only if the part on the row stops
-  short of the fixed 38-character name field; if it fills the field the break
+  short of the fixed 22-character name field; if it fills the field the break
   was mid-word and the halves join directly. See `ReceiptParser.joinName`.
+- The quantity row carries the **per-unit** price, not the line total. Building
+  it from `item.amount` printed "2 x ₱400.00" for two items at ₱200 — a
+  customer reads that as ₱800. Only shows up above quantity 1.
 
 ### Building and testing
 
 `android/printgateway/build.sh` — no Gradle, just `aapt2`/`javac`/`d8`/
 `apksigner`. It fails loudly on a compile error; it used to swallow them and
-install a stale APK, so do not reintroduce a `|| true` there.
+install a stale APK, so do not reintroduce a `|| true` there. It now takes the
+newest build-tools and platform actually installed rather than pinned versions,
+which is what let a second machine build without touching the script.
+
+Two things that cost time when setting up a new machine:
+
+- **The debug key is per-machine**, so installing over a build from another PC
+  fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. You have to uninstall first
+  — and uninstalling **deletes the app's `jobs/` folder**, which is where every
+  captured print lives. Pull it before you uninstall. There is a copy at
+  `captures/phone-backup/`.
+- After `am start` the socket takes a moment; wait for `listening on 9100` in
+  logcat before replaying, or the job silently never arrives.
 
 To replay a captured sale without ringing one up, send it from the **device's
 own shell** — `adb forward` silently never reaches the app:
@@ -102,48 +134,35 @@ directory, so the replica can be compared against the real print at any time.
 
 ## Open, in the order it matters
 
-1. **Voucher codes on the phone.** The biggest unknown. Omada issuing runs on a
-   PC through a real Chrome profile; the phone has none. Likely path is a
-   WebView holding the session, unproven. Until then the gateway prints
-   placeholder codes derived from the receipt number.
+1. **Voucher codes on the phone.** The biggest unknown, and now the main thing
+   standing between this and a real deployment. Omada issuing runs on a PC
+   through a real Chrome profile; the phone has none. Likely path is a WebView
+   holding the session, unproven. Until then the gateway prints placeholder
+   codes derived from the receipt number.
 2. **Bluetooth printer.** The gateway renders but does not transmit — the
    printer is at the client and has never been in hand. Risk: contention if
    Loyverse holds the connection open. The single-gateway design mitigates
    this, since only the gateway would talk to the printer.
-3. **Multi-voucher layout is unverified.** Only a single-voucher capture has
-   been replayed. Ring up a WiFi Voucher with quantity 3 and check the spacing.
-4. **Receipt shapes: partly seen now.** Three real sales are captured and all
-   parse correctly at 32 columns. A **PWD discount** appears indented
-   (`| PWD                     - 30.00|`), so it does not match the item
-   pattern and passes through harmlessly — but only that one discount type has
-   been seen. A payment row (`Card`, `Gcash`) *does* sit at column 0 with an
-   amount and matches the item pattern; it is rejected only because no
-   quantity row follows, so do not weaken that check.
-
-   Still unseen: refunds (the amount pattern has no minus sign), variants and
+3. **Nothing has been on paper yet.** Every check so far is against Loyverse's
+   own graphic output, which is the right reference, but no physical print has
+   been compared. The voucher's longest line, `WILL EXPIRE AFTER 24 HOURS`,
+   comes to ~341px on 384px paper — 21px each side, the tightest thing on the
+   page and the first to check.
+4. **Receipt shapes still unseen.** Refunds (the amount pattern has no minus
+   sign, though a `- 30.00` discount does render correctly), variants and
    modifiers, a store logo (which would make `hasImage()` true and disable the
-   replica entirely), and five-figure totals.
+   replica entirely), and five-figure totals. Pass-through means an unknown row
+   now survives rather than vanishing, so the risk is layout, not loss.
+5. **Multi-voucher spacing is still unverified on paper.** Two and three
+   vouchers render, but only single-voucher output has been compared against
+   anything real.
 
-   **`NAME_FIELD` and `NAME_COLUMN_RIGHT` are now pinned at 58mm.** A test sale
-   with two deliberately long names — one unbroken, one spaced — was printed in
-   both modes from a phone's Loyverse (the site's item list must not be
-   polluted). `NAME_FIELD = 22` is exact: the unbroken name broke after exactly
-   22 characters. `NAME_COLUMN_RIGHT = 291` is bracketed to 286..297 and sits
-   mid-window.
+Smaller, noted but not acted on:
 
-   That test also proved something the design assumed but had never shown:
-   **the two modes wrap in different places.** Text fit `aaa bbb ccc ddd eee`
-   (19 chars, since `fff` would exceed the 22-char field) while graphic fit
-   `aaa bbb ccc ddd eee fff` — because graphic wraps on pixels and `fff` is
-   narrow. Copying text rows onto the canvas would break names in the wrong
-   place; re-wrapping against `NAME_COLUMN_RIGHT` is what makes it correct.
-
-   Both `joinName` cases are verified end to end: the spaced name rejoins with
-   its space restored, the unbroken one joins directly with no spurious space.
-5. **Voucher typography — settled.** The verdict was to match the receipt
-   rather than have a look of its own: same fonts, same sizes, keep it simple.
-   `VoucherRenderer` now takes both sizes and all three line pitches from
-   `ReceiptRenderer` instead of defining its own, so the two cannot drift apart.
-   The code prints at the receipt's bold total size, the one place that page
-   already shouts; everything else is body size. Rendered but **not yet seen on
-   paper** — it needs a build on the machine with the Android SDK.
+- No visual separator between the receipt and the voucher — they flow straight
+  into each other.
+- The voucher's expiry line hardcodes "24 HOURS" while the real validity comes
+  from `VOUCHER_VALID_HOURS` on the service side. They agree today; change the
+  validity and the slip quietly lies.
+- `VoucherRenderer.render` takes access hours but not validity hours, which is
+  why the above is hardcoded. Fixing it changes the signature and its call site.

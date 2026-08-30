@@ -1,5 +1,7 @@
 package com.cafeservices.printgateway;
 
+import android.graphics.Bitmap;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -13,6 +15,22 @@ public final class PrintJob {
     public final String source;
     public final byte[] raw;
     public final EscPosDecoder.Result decoded;
+
+    private Bitmap rendered;
+    private boolean renderAttempted;
+
+    /** The printed image, or null if this job was plain text. */
+    public Bitmap bitmap() {
+        if (!renderAttempted) {
+            renderAttempted = true;
+            rendered = RasterRenderer.render(decoded.rasters);
+        }
+        return rendered;
+    }
+
+    public boolean hasImage() {
+        return !decoded.rasters.isEmpty();
+    }
 
     public PrintJob(String source, byte[] raw) {
         this.receivedAt = System.currentTimeMillis();

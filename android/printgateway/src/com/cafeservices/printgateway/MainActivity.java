@@ -8,7 +8,9 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.graphics.Bitmap;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.net.InetAddress;
@@ -31,6 +33,7 @@ public class MainActivity extends Activity {
     private TextView statusLine;
     private TextView addressLine;
     private TextView jobsView;
+    private ImageView receiptImage;
     private Button toggleButton;
 
     private final BroadcastReceiver jobReceiver = new BroadcastReceiver() {
@@ -52,6 +55,7 @@ public class MainActivity extends Activity {
         statusLine = (TextView) findViewById(R.id.statusLine);
         addressLine = (TextView) findViewById(R.id.addressLine);
         jobsView = (TextView) findViewById(R.id.jobsView);
+        receiptImage = (ImageView) findViewById(R.id.receiptImage);
         toggleButton = (Button) findViewById(R.id.toggleButton);
 
         toggleButton.setOnClickListener(new View.OnClickListener() {
@@ -122,6 +126,18 @@ public class MainActivity extends Activity {
         addressLine.setText(addresses());
 
         List<PrintJob> jobs = PrintServerService.jobs();
+
+        // Loyverse renders receipts as a bitmap, so for those the picture is
+        // the only representation there is. Show the newest one full size.
+        Bitmap newest = jobs.isEmpty() ? null : jobs.get(0).bitmap();
+        if (newest != null) {
+            receiptImage.setImageBitmap(newest);
+            receiptImage.setVisibility(View.VISIBLE);
+        } else {
+            receiptImage.setImageDrawable(null);
+            receiptImage.setVisibility(View.GONE);
+        }
+
         if (jobs.isEmpty()) {
             jobsView.setText("No print jobs yet.\n\nSend a test print from Loyverse "
                     + "and the receipt will appear here.");

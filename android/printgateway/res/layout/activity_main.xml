@@ -63,6 +63,21 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
+      <LinearLayout
+          android:orientation="vertical"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/receiptImage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitStart"
+            android:background="#FFFFFF"
+            android:contentDescription="Rendered receipt"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/jobsView"
             android:layout_width="match_parent"
@@ -72,5 +87,6 @@
             android:paddingTop="6dp"
             android:textIsSelectable="true"
             android:text="Waiting for a print job..." />
+      </LinearLayout>
     </ScrollView>
 </LinearLayout>

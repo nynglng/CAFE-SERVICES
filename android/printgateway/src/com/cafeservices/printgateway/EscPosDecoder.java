@@ -52,7 +52,30 @@ public final class EscPosDecoder {
         }
     }
 
+    /** A GS v 0 raster block: 1 bit per pixel, MSB first, black = 1. */
+    public static final class Raster {
+        public final int widthBytes;
+        public final int height;
+        public final byte[] bits;
+        /** Justification in force when this band printed. */
+        public final int align;
+
+        Raster(int widthBytes, int height, byte[] bits, int align) {
+            this.widthBytes = widthBytes;
+            this.height = height;
+            this.bits = bits;
+            this.align = align;
+        }
+
+        public int widthPixels() {
+            return widthBytes * 8;
+        }
+    }
+
     public static final class Result {
+        /** Image bands, in the order they were printed. */
+        public final List<Raster> rasters = new ArrayList<Raster>();
+
         public final List<Line> lines = new ArrayList<Line>();
         /** Commands that carry meaning beyond text: cuts, drawers, logos. */
         public final List<String> events = new ArrayList<String>();
@@ -155,9 +178,8 @@ public final class EscPosDecoder {
                     continue;
                 }
                 if (next == 0x76) { // GS v 0 raster bit image
-                    int consumed = skipRaster(data, i);
-                    out.events.add("image or logo, " + consumed + " bytes");
-                    i += consumed;
+                    flush(out, current, align, bold, doubleWidth, doubleHeight);
+                    i += captureRaster(data, i, out, align);
                     continue;
                 }
                 if (next == 0x28) { // GS ( variable length command
@@ -214,17 +236,36 @@ public final class EscPosDecoder {
         return (index < data.length) ? (data[index] & 0xFF) : 0;
     }
 
-    /** GS v 0 m xL xH yL yH, then the bitmap itself. */
-    private static int skipRaster(byte[] data, int i) {
-        if (i + 7 >= data.length) {
+    /**
+     * GS v 0 m xL xH yL yH, then the bitmap itself.
+     *
+     * Loyverse sends its whole receipt this way, so the block is kept rather
+     * than skipped: rendering it back is the only way to see what would print.
+     */
+    private static int captureRaster(byte[] data, int i, Result out, int align) {
+        if (i + 8 >= data.length) {
             return data.length - i;
         }
-        int xL = data[i + 3] & 0xFF;
-        int xH = data[i + 4] & 0xFF;
-        int yL = data[i + 5] & 0xFF;
-        int yH = data[i + 6] & 0xFF;
-        int bytes = (xL + xH * 256) * (yL + yH * 256);
-        return Math.min(7 + bytes, data.length - i);
+        // Layout is GS v 0 m xL xH yL yH d1..dk, so the mode byte sits at i+3
+        // and the dimensions start at i+4. Reading them one byte early yields
+        // plausible-looking garbage rather than an obvious failure.
+        int xL = data[i + 4] & 0xFF;
+        int xH = data[i + 5] & 0xFF;
+        int yL = data[i + 6] & 0xFF;
+        int yH = data[i + 7] & 0xFF;
+        int widthBytes = xL + xH * 256;
+        int height = yL + yH * 256;
+        int payload = widthBytes * height;
+        int available = Math.max(0, Math.min(payload, data.length - (i + 8)));
+
+        byte[] bits = new byte[available];
+        if (available > 0) {
+            System.arraycopy(data, i + 8, bits, 0, available);
+        }
+        out.rasters.add(new Raster(widthBytes, height, bits, align));
+        out.events.add("image " + (widthBytes * 8) + "x" + height + " px");
+
+        return Math.min(8 + payload, data.length - i);
     }
 
     /** GS k m: either NUL-terminated or length-prefixed, depending on m. */

@@ -83,29 +83,23 @@ public final class VoucherRenderer {
      *
      * Never digits. A stand-in code looks exactly like a real one to a guest,
      * who would type it, fail to get online, and blame the cafe - so the slip
-     * says plainly that the code has to come from a person. The cafe keeps
-     * pre-printed vouchers behind the counter for exactly this.
+     * says plainly that the code has to come from a person, and says nothing
+     * else. A heading promising a voucher above a line admitting there is not
+     * one only reads as a printer fault.
      */
-    public static Bitmap renderUnavailable(int count) {
-        Paint titlePaint = paint(TITLE_SIZE, true);
+    public static Bitmap renderUnavailable() {
         Paint detailPaint = paint(DETAIL_SIZE, false);
 
         List<String> lines = new ArrayList<String>();
-        lines.add("Please ask the cashier");
-        lines.add("for a Wi-Fi voucher");
-        if (count > 1) {
-            lines.add("(" + count + " vouchers paid for)");
-        }
+        lines.add("Please ask cashier");
+        lines.add("for a wi-fi voucher");
 
-        int height = PAD_TOP + AFTER_TITLE
-                + DETAIL_PITCH * lines.size() + PAD_BOTTOM;
+        int height = PAD_TOP + DETAIL_PITCH * lines.size() + PAD_BOTTOM;
         Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
         int y = PAD_TOP;
-        centre(canvas, title(), y, titlePaint);
-        y += AFTER_TITLE;
         for (String line : lines) {
             centre(canvas, line, y, detailPaint);
             y += DETAIL_PITCH;

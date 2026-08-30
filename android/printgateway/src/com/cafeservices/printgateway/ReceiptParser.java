@@ -44,13 +44,17 @@ public final class ReceiptParser {
     /**
      * Width of the item-name field before the amount column.
      *
-     * Amounts occupy the last 10 columns, right-aligned: "400.00" lands at
-     * 27-32 and the wider "- 30.00" of a discount at 26-32, both inside the
-     * same field. That leaves 22 for the name.
+     * Confirmed by printing a deliberately long name and counting where it
+     * broke, rather than inferred:
      *
-     * UNVERIFIED above 22 characters: no captured receipt has a name long
-     * enough to wrap at this width, so the exact break point has not been
-     * seen. Re-check against a long name when one turns up.
+     *     ABCDEFGHIJKLMNOPQRSTUV     20.00      exactly 22, broke mid-word
+     *     WXYZ012345
+     *
+     *     aaa bbb ccc ddd eee        30.00      19, stopped short of the field
+     *     fff ggg hhh                           because "fff" would not fit
+     *
+     * Amounts occupy the last 10 columns, right-aligned, which is what leaves
+     * 22 for the name.
      */
     public static final int NAME_FIELD = 22;
 

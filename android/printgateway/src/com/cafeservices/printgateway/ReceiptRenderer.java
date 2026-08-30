@@ -44,17 +44,16 @@ public final class ReceiptRenderer {
     /**
      * Where a name has to stop so it cannot run into the amount.
      *
-     * Measured: on every item row the amount's ink begins at x = 295, and the
-     * longest name seen ("WHITECHOCO ICED16") ends at 239. The old 80mm
-     * calibration put this 8px clear of the amount column, so the same rule
-     * gives 287 here.
+     * Bracketed by two deliberately long names printed at 58mm:
      *
-     * UNVERIFIED: no captured receipt has a name long enough to wrap at 58mm,
-     * so the true break point is only known to lie between 240 and 295. Pin it
-     * properly when a long name turns up - the 80mm value was fixed to a
-     * two-pixel window this way, and this one deserves the same.
+     *   fits        "ABCDEFGHIJKLMNOPQRSTUV"        ink ends at 285
+     *   must not    "aaa bbb ccc ddd eee fff ggg"   would reach ~298
+     *
+     * so the real threshold is somewhere in 286..297, and 291 sits in the
+     * middle of that window rather than against either edge. The amount's ink
+     * begins at 308, so this also leaves the column clear.
      */
-    private static final int NAME_COLUMN_RIGHT = 287;
+    private static final int NAME_COLUMN_RIGHT = 291;
 
     /**
      * Loyverse prints the peso sign before every amount, but sends it as 0x7F

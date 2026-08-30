@@ -124,10 +124,22 @@ directory, so the replica can be compared against the real print at any time.
    modifiers, a store logo (which would make `hasImage()` true and disable the
    replica entirely), and five-figure totals.
 
-   **`NAME_FIELD` and `NAME_COLUMN_RIGHT` are unverified at 58mm** — no
-   captured receipt has a name long enough to wrap, so the break point is only
-   bounded, not pinned. The 80mm equivalents were fixed to a two-pixel window;
-   these deserve the same once a long name turns up.
+   **`NAME_FIELD` and `NAME_COLUMN_RIGHT` are now pinned at 58mm.** A test sale
+   with two deliberately long names — one unbroken, one spaced — was printed in
+   both modes from a phone's Loyverse (the site's item list must not be
+   polluted). `NAME_FIELD = 22` is exact: the unbroken name broke after exactly
+   22 characters. `NAME_COLUMN_RIGHT = 291` is bracketed to 286..297 and sits
+   mid-window.
+
+   That test also proved something the design assumed but had never shown:
+   **the two modes wrap in different places.** Text fit `aaa bbb ccc ddd eee`
+   (19 chars, since `fff` would exceed the 22-char field) while graphic fit
+   `aaa bbb ccc ddd eee fff` — because graphic wraps on pixels and `fff` is
+   narrow. Copying text rows onto the canvas would break names in the wrong
+   place; re-wrapping against `NAME_COLUMN_RIGHT` is what makes it correct.
+
+   Both `joinName` cases are verified end to end: the spaced name rejoins with
+   its space restored, the unbroken one joins directly with no spurious space.
 5. **Voucher typography — settled.** The verdict was to match the receipt
    rather than have a look of its own: same fonts, same sizes, keep it simple.
    `VoucherRenderer` now takes both sizes and all three line pitches from

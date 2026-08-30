@@ -57,9 +57,46 @@ public final class PrintJob {
         if (receipt.items.isEmpty()) {
             return null;
         }
-        replicaBitmap = ReceiptRenderer.render(SalePlan.from(receipt), receipt,
+        SalePlan plan = SalePlan.from(receipt);
+        Bitmap top = ReceiptRenderer.render(plan, receipt,
                 MainActivity.storeHeader(receipt));
+        Bitmap bottom = plan.printVoucher
+                ? VoucherRenderer.render(codes(plan), MainActivity.SSID,
+                        MainActivity.ACCESS_HOURS)
+                : null;
+        replicaBitmap = stack(top, bottom);
         return replicaBitmap;
+    }
+
+    /**
+     * Placeholder codes, stable per receipt so the same sale always previews
+     * the same digits. Replaced once Omada issues them for real.
+     */
+    private static List<String> codes(SalePlan plan) {
+        List<String> out = new ArrayList<String>();
+        for (int i = 0; i < plan.voucherCount; i++) {
+            int seed = Math.abs((plan.receiptNumber + ":" + i).hashCode()) % 1000000;
+            out.add(String.format(Locale.US, "%06d", seed));
+        }
+        return out;
+    }
+
+    /** One above the other on the same strip of paper. */
+    private static Bitmap stack(Bitmap top, Bitmap bottom) {
+        if (top == null) {
+            return bottom;
+        }
+        if (bottom == null) {
+            return top;
+        }
+        int width = Math.max(top.getWidth(), bottom.getWidth());
+        Bitmap out = Bitmap.createBitmap(width,
+                top.getHeight() + bottom.getHeight(), Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(out);
+        canvas.drawColor(android.graphics.Color.WHITE);
+        canvas.drawBitmap(top, 0, 0, null);
+        canvas.drawBitmap(bottom, 0, top.getHeight(), null);
+        return out;
     }
 
     public PrintJob(String source, String dialled, byte[] raw) {

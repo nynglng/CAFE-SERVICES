@@ -15,11 +15,8 @@ import android.widget.TextView;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Shows what the printer would have printed.
@@ -34,8 +31,8 @@ public class MainActivity extends Activity {
     private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
 
     /** Shown on the voucher slip. Will move into settings. */
-    private static final String SSID = "The Cafe WiFi";
-    private static final int ACCESS_HOURS = 2;
+    static final String SSID = "CAFE";
+    static final int ACCESS_HOURS = 2;
 
     private TextView statusLine;
     private TextView addressLine;
@@ -250,25 +247,15 @@ public class MainActivity extends Activity {
                 sb.append(row).append('\n');
             }
         }
-
         if (plan.printVoucher) {
-            List<String> codes = new ArrayList<String>();
-            for (int i = 0; i < plan.voucherCount; i++) {
-                codes.add(placeholderCode(plan.receiptNumber, i));
-            }
-            Date expires = new Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L);
-            sb.append('\n');
-            sb.append(VoucherSlip.build(codes, SSID, ACCESS_HOURS, expires, PAPER_WIDTH));
-            sb.append("  (codes are placeholders until Omada is wired)\n");
+            // The slip itself is drawn by VoucherRenderer and shown above as
+            // part of the picture; only the count is worth restating here.
+            sb.append("\n  + ").append(plan.voucherCount)
+                    .append(" voucher(s) drawn below the receipt\n")
+                    .append("  (codes are placeholders until Omada is wired)\n");
         }
 
         return sb.toString();
-    }
-
-    /** Stable per receipt, so the same sale always previews the same digits. */
-    private static String placeholderCode(String receiptNumber, int index) {
-        int seed = Math.abs((receiptNumber + ":" + index).hashCode()) % 1000000;
-        return String.format(Locale.US, "%06d", seed);
     }
 
     /** The store name row, which sits centred above everything else. */

@@ -73,9 +73,30 @@ public final class ReceiptRenderer {
     public static final float TOTAL_SIZE = 34f;
     private static final float HEADER_SIZE = 24f;
 
+    /**
+     * Row rhythm, measured from a real 58mm capture: consecutive rows sit
+     * about 36px apart, a blank row costs 19, a divider hangs 4px under the
+     * row above with 28px of air after it, the store name is followed by 53,
+     * and the bold Total takes 49.
+     */
+    private static final int PITCH_ROW = 36;
+    private static final int PITCH_BLANK = 19;
+    private static final int PITCH_AFTER_DIVIDER = 28;
+    private static final int PITCH_TITLE = 53;
+    private static final int PITCH_TOTAL = 49;
+
     public static final int PITCH_WRAPPED = 31;
     public static final int PITCH_TO_QUANTITY = 37;
     public static final int PITCH_BETWEEN_ITEMS = 56;
+
+    private static final char SPACE = 32;
+    private static final char DASH = 45;
+    private static final char COMMA = 44;
+    private static final char DOT = 46;
+    private static final char HASH = 35;
+
+    /** The body paint, so row layout can measure names for wrapping. */
+    private static Paint textPaint;
 
     private ReceiptRenderer() {
     }
@@ -101,9 +122,10 @@ public final class ReceiptRenderer {
         Paint text = body(false, BODY_SIZE);
         Paint bold = body(true, HEADER_SIZE);
         Paint total = body(true, TOTAL_SIZE);
+        textPaint = text;
 
         calibrate(text);
-        List<Block> blocks = layout(plan, receipt, header, text, total);
+        List<Block> blocks = layout(plan, receipt, header);
 
         int height = 0;
         for (Block b : blocks) {
@@ -195,91 +217,201 @@ public final class ReceiptRenderer {
         }
     }
 
+    /**
+     * Replay the receipt row by row, in the order Loyverse sent them.
+     *
+     * An earlier version rebuilt the page from recognised pieces - employee,
+     * items, Total, Cash - and silently dropped everything else. On a real
+     * cafe sale that lost the PWD discount, the Card payment and the address,
+     * leaving a receipt whose figures did not add up. Anything unrecognised
+     * now passes through untouched, so a row type nobody anticipated survives.
+     *
+     * Item names are the one exception. Loyverse broke those to fit its
+     * 22-character text field, but graphic mode breaks on pixels and lands
+     * elsewhere, so an item's rows are replaced by its rejoined name
+     * re-wrapped against NAME_COLUMN_RIGHT.
+     */
     private static List<Block> layout(SalePlan plan, ReceiptParser.Receipt receipt,
-                                      String header, Paint text, Paint total) {
+                                      String header) {
         List<Block> blocks = new ArrayList<Block>();
         int y = 10;
 
-        Row title = new Row();
-        title.left = header;
-        title.isBold = true;
-        title.centred = true;
-        title.y = y;
-        blocks.add(title);
-        y += 23 + 33;
-
-        for (String meta : metaRows(receipt)) {
-            Row r = new Row();
-            r.left = meta;
-            r.y = y;
-            blocks.add(r);
-            y += 31;
-        }
-
-        Divider top = new Divider();
-        top.y = y + 4;
-        blocks.add(top);
-        y += 3 + 25;
-
+        // Row index -> the item starting there, so its rows can be redrawn.
+        java.util.Map<Integer, ReceiptParser.Item> startsAt =
+                new java.util.HashMap<Integer, ReceiptParser.Item>();
         for (ReceiptParser.Item item : receipt.items) {
-            if (SalePlan.isWifi(item.name)) {
-                continue; // replaced by the voucher below
-            }
-            List<String> lines = wrap(item.name, text, NAME_COLUMN_RIGHT - MARGIN_LEFT);
-            for (int i = 0; i < lines.size(); i++) {
-                Row r = new Row();
-                r.left = lines.get(i);
-                r.right = (i == 0) ? PESO + item.amount : null;
-                r.y = y;
-                blocks.add(r);
-                y += PITCH_WRAPPED;
-            }
-            Row qty = new Row();
-            qty.left = item.wholeQuantity() + " x " + PESO + item.unitAmount;
-            qty.y = y - PITCH_WRAPPED + PITCH_TO_QUANTITY;
-            blocks.add(qty);
-            y = qty.y + PITCH_BETWEEN_ITEMS;
+            startsAt.put(Integer.valueOf(item.firstRow), item);
         }
 
-        Divider mid = new Divider();
-        mid.y = y - 20;
-        blocks.add(mid);
-        y += 8;
+        boolean firstDrawn = true;
+        for (int i = 0; i < receipt.rows.size(); i++) {
+            ReceiptParser.Item item = startsAt.get(Integer.valueOf(i));
 
-        for (String[] pair : totalRows(receipt)) {
+            if (item != null) {
+                i = item.lastRow; // its rows are spoken for either way
+                if (SalePlan.isWifi(item.name)) {
+                    continue; // replaced by the voucher below
+                }
+                List<String> lines = wrap(item.name, textPaint,
+                        NAME_COLUMN_RIGHT - MARGIN_LEFT);
+                for (int n = 0; n < lines.size(); n++) {
+                    Row r = new Row();
+                    r.left = lines.get(n);
+                    r.right = (n == 0) ? PESO + item.amount : null;
+                    r.y = y;
+                    blocks.add(r);
+                    y += PITCH_ROW;
+                }
+                Row qty = new Row();
+                qty.left = item.wholeQuantity() + " x " + PESO + item.unitAmount;
+                qty.y = y;
+                blocks.add(qty);
+                y += PITCH_ROW;
+                firstDrawn = false;
+                continue;
+            }
+
+            String raw = receipt.rows.get(i);
+            if (raw.trim().length() == 0) {
+                y += PITCH_BLANK;
+                continue;
+            }
+            if (isDivider(raw)) {
+                y += 4;
+                Divider d = new Divider();
+                d.y = y;
+                blocks.add(d);
+                y += PITCH_AFTER_DIVIDER;
+                continue;
+            }
+
             Row r = new Row();
-            r.left = pair[0];
-            r.right = PESO + pair[1];
-            r.isTotal = "Total".equalsIgnoreCase(pair[0]);
+            String text = restorePeso(raw);
+            // Only a money value or the receipt number is pinned to the right
+            // edge. Trailing padding cannot be used to tell - the rows arrive
+            // already trimmed - and splitting on any wide gap threw "POS: POS
+            // 1" to opposite edges of the paper.
+            int cut = lastGap(text);
+            boolean pinnedRight = cut > 0 && pinsRight(text.substring(cut).trim());
+            if (pinnedRight) {
+                r.left = collapseSpaces(text.substring(0, cut).trim());
+                r.right = text.substring(cut).trim();
+            } else {
+                r.left = collapseSpaces(text.trim());
+                r.centred = isCentred(raw);
+            }
+            r.isTotal = r.left.equalsIgnoreCase("Total");
+            r.isBold = firstDrawn;
             r.y = y;
             blocks.add(r);
-            y += r.isTotal ? 68 : 41;
+            y += r.isTotal ? PITCH_TOTAL : (firstDrawn ? PITCH_TITLE : PITCH_ROW);
+            firstDrawn = false;
         }
-
-        Divider bottom = new Divider();
-        bottom.y = y - 18;
-        blocks.add(bottom);
-        y += 8;
-
-        Row footer = new Row();
-        footer.left = footerLeft(receipt);
-        footer.right = receipt.receiptNumber;
-        footer.y = y;
-        blocks.add(footer);
 
         return blocks;
     }
 
-    /** Rows above the first divider: employee, POS and anything like them. */
-    private static List<String> metaRows(ReceiptParser.Receipt receipt) {
-        List<String> out = new ArrayList<String>();
-        for (String row : receipt.rows) {
-            String t = row.trim();
-            if (t.startsWith("Employee") || t.startsWith("POS:")) {
-                out.add(collapseSpaces(t));
+    /**
+     * Whether a trailing value belongs against the right edge: an amount, or
+     * the receipt number in the footer. Anything else is part of the sentence
+     * on the left and stays there.
+     */
+    private static boolean pinsRight(String value) {
+        if (value.length() == 0) {
+            return false;
+        }
+        if (value.indexOf(PESO) >= 0) {
+            return true;
+        }
+        return value.charAt(0) == HASH;
+    }
+
+    /** A rule row: dashes and spaces, nothing else. */
+    private static boolean isDivider(String row) {
+        String t = row.trim();
+        if (t.length() < 3) {
+            return false;
+        }
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (c != DASH && c != SPACE) {
+                return false;
             }
         }
-        return out;
+        return true;
+    }
+
+    /** Loyverse centres by padding both sides, so balanced padding means centred. */
+    private static boolean isCentred(String row) {
+        int lead = 0;
+        while (lead < row.length() && row.charAt(lead) == SPACE) {
+            lead++;
+        }
+        int trail = 0;
+        while (trail < row.length() - lead && row.charAt(row.length() - 1 - trail) == SPACE) {
+            trail++;
+        }
+        return lead >= 2 && Math.abs(lead - trail) <= 3;
+    }
+
+    /**
+     * Index just past the last run of two or more spaces, which is where a
+     * value pinned to the right begins. Returns -1 when there is no such run.
+     */
+    private static int lastGap(String text) {
+        String t = trimRight(text);
+        for (int i = t.length() - 2; i > 0; i--) {
+            if (t.charAt(i) == SPACE && t.charAt(i - 1) == SPACE) {
+                int end = i;
+                while (end < t.length() && t.charAt(end) == SPACE) {
+                    end++;
+                }
+                return end;
+            }
+        }
+        return -1;
+    }
+
+    private static String trimRight(String s) {
+        int end = s.length();
+        while (end > 0 && s.charAt(end - 1) == SPACE) {
+            end--;
+        }
+        return s.substring(0, end);
+    }
+
+    /**
+     * Put the peso sign back in front of every amount.
+     *
+     * The decoder turns Loyverse's 0x7F into a space to keep the columns
+     * straight, and that space is exactly where the symbol belongs.
+     */
+    private static String restorePeso(String row) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < row.length(); i++) {
+            char c = row.charAt(i);
+            if (c == SPACE && i + 1 < row.length() && startsAmount(row, i + 1)) {
+                sb.append(PESO);
+                continue;
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    /** True when a digit run with two decimal places begins here. */
+    private static boolean startsAmount(String row, int at) {
+        int i = at;
+        boolean digits = false;
+        while (i < row.length()
+                && (Character.isDigit(row.charAt(i)) || row.charAt(i) == COMMA)) {
+            digits = true;
+            i++;
+        }
+        if (!digits || i + 2 >= row.length() || row.charAt(i) != DOT) {
+            return false;
+        }
+        return Character.isDigit(row.charAt(i + 1)) && Character.isDigit(row.charAt(i + 2));
     }
 
     /** Loyverse collapses the padding its text layout leaves between fields. */

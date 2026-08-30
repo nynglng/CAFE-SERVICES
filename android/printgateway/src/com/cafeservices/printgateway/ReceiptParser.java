@@ -84,12 +84,24 @@ public final class ReceiptParser {
          * `amount` misprices every multi-quantity line.
          */
         public final String unitAmount;
+        /**
+         * Which rows of the receipt this item occupies: the name row, any
+         * continuation rows, and the quantity row. The renderer replays rows
+         * in order and needs to know which ones an item has already spoken
+         * for, so it can redraw the name at the right wrap point instead of
+         * repeating Loyverse's text-mode breaks.
+         */
+        public final int firstRow;
+        public final int lastRow;
 
-        Item(String name, double quantity, String amount, String unitAmount) {
+        Item(String name, double quantity, String amount, String unitAmount,
+             int firstRow, int lastRow) {
             this.name = name;
             this.quantity = quantity;
             this.amount = amount;
             this.unitAmount = unitAmount;
+            this.firstRow = firstRow;
+            this.lastRow = lastRow;
         }
 
         public int wholeQuantity() {
@@ -173,7 +185,7 @@ public final class ReceiptParser {
             // Older captures may lack the price on the quantity row; falling
             // back to the line total keeps a single-quantity item correct.
             String unit = quantity.group(2) != null ? quantity.group(2) : amount;
-            receipt.items.add(new Item(name, count, amount, unit));
+            receipt.items.add(new Item(name, count, amount, unit, i, j));
             i = j;
         }
 

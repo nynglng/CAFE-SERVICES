@@ -9,24 +9,41 @@ import java.util.regex.Pattern;
  * Pulls the sale out of a Loyverse text-mode print.
  *
  * With print mode set to Text, Loyverse writes fixed 48-column rows and sends
- * no line breaks between them - the printer is expected to wrap. So the stream
- * has to be re-cut into 48-character rows before any of it makes sense.
+ * no line breaks between them - the printer is expected to wrap - so the stream
+ * has to be re-cut into rows before any of it makes sense.
  *
- * A sold line looks like this, across two rows:
+ * An item spans two or more rows:
  *
- *     seasalt                                 P170.00
- *     1 x P170.00
+ *     seasalt                                   170.00
+ *      1 x   170.00
  *
- * so the name and total are on one row and the quantity on the next. The
- * receipt number on the footer row gives us something stable to key on, which
- * matters because a voucher must not be minted twice for one sale.
+ * and a name too long for the field continues on rows of its own before the
+ * quantity row arrives.
+ *
+ * Two details make the parsing reliable. Items begin at column 0, while every
+ * other row - Employee, POS, the quantity, Total, Cash - begins with a space.
+ * And the name field is a fixed 38 characters, which is what tells us how a
+ * wrapped name was broken; see joinName.
  */
 public final class ReceiptParser {
 
     /** Loyverse's row width in text mode on 80mm paper. */
     public static final int COLUMNS = 48;
 
-    /** "1 x P170.00" - the quantity row that follows an item. */
+    /**
+     * Width of the item-name field before the amount column.
+     *
+     * Measured from a receipt carrying names far longer than the field. It is
+     * worth re-checking if amounts ever grow wider (a five-figure total, say),
+     * since the field may be sized around them.
+     */
+    public static final int NAME_FIELD = 38;
+
+    /** "seasalt                       170.00" - a name and its amount. */
+    private static final Pattern ITEM =
+            Pattern.compile("^(\\S.*?)\\s\\s+([0-9,]+\\.[0-9]{2})\\s*$");
+
+    /** " 1 x   170.00" - the quantity row belonging to the item above. */
     private static final Pattern QUANTITY =
             Pattern.compile("^\\s*([0-9]+(?:\\.[0-9]+)?)\\s*x\\s");
 
@@ -52,7 +69,7 @@ public final class ReceiptParser {
     public static final class Receipt {
         public final List<Item> items = new ArrayList<Item>();
         public String receiptNumber = "";
-        /** The reflowed rows, useful for showing what was actually parsed. */
+        /** The reflowed rows, as the printer would have wrapped them. */
         public final List<String> rows = new ArrayList<String>();
 
         public Item findItem(String needle) {
@@ -71,46 +88,77 @@ public final class ReceiptParser {
 
     public static Receipt parse(EscPosDecoder.Result decoded) {
         Receipt receipt = new Receipt();
-
         for (EscPosDecoder.Line line : decoded.lines) {
-            for (String row : reflow(line.text)) {
-                receipt.rows.add(row);
-            }
+            receipt.rows.addAll(reflow(line.text));
         }
 
         for (int i = 0; i < receipt.rows.size(); i++) {
             String row = receipt.rows.get(i);
 
             if (receipt.receiptNumber.length() == 0) {
-                Matcher m = RECEIPT_NUMBER.matcher(row);
-                if (m.find()) {
-                    receipt.receiptNumber = m.group();
+                Matcher number = RECEIPT_NUMBER.matcher(row);
+                if (number.find()) {
+                    receipt.receiptNumber = number.group();
                 }
             }
 
-            // An item is only an item if the row below states a quantity.
-            if (i + 1 >= receipt.rows.size()) {
-                continue;
-            }
-            Matcher q = QUANTITY.matcher(receipt.rows.get(i + 1));
-            if (!q.find()) {
+            Matcher item = ITEM.matcher(row);
+            if (!item.matches()) {
                 continue;
             }
 
-            String name = itemName(row);
-            if (name.length() == 0) {
+            String name = item.group(1).trim();
+            String amount = item.group(2);
+
+            // Continuation rows carry the rest of the name. They also start at
+            // column 0, and run until the quantity row.
+            int j = i + 1;
+            while (j < receipt.rows.size()) {
+                String next = receipt.rows.get(j);
+                if (next.trim().length() == 0
+                        || next.startsWith(" ")
+                        || QUANTITY.matcher(next).find()) {
+                    break;
+                }
+                name = joinName(name, next.trim());
+                j++;
+            }
+
+            // Without a quantity row this was not an item at all.
+            if (j >= receipt.rows.size()) {
                 continue;
             }
-            double quantity;
+            Matcher quantity = QUANTITY.matcher(receipt.rows.get(j));
+            if (!quantity.find()) {
+                continue;
+            }
+
+            double count;
             try {
-                quantity = Double.parseDouble(q.group(1));
+                count = Double.parseDouble(quantity.group(1));
             } catch (NumberFormatException e) {
                 continue;
             }
-            receipt.items.add(new Item(name, quantity, trailingAmount(row)));
+            receipt.items.add(new Item(name, count, amount));
+            i = j;
         }
 
         return receipt;
+    }
+
+    /**
+     * Rejoin a name Loyverse split across rows.
+     *
+     * The name field is a fixed width. If the part already on the row stops
+     * short of it, the break happened at a space that was then swallowed, so a
+     * space goes back in. If it fills the field, the break fell mid-word and
+     * the halves join directly. Getting this backwards silently corrupts every
+     * long item name, so it is worth stating plainly.
+     */
+    static String joinName(String soFar, String continuation) {
+        return soFar.length() >= NAME_FIELD
+                ? soFar + continuation
+                : soFar + " " + continuation;
     }
 
     /**
@@ -121,7 +169,7 @@ public final class ReceiptParser {
      */
     public static List<String> reflow(String text) {
         List<String> rows = new ArrayList<String>();
-        String clean = strip(text);
+        String clean = normalise(text);
         if (clean.length() == 0) {
             rows.add("");
             return rows;
@@ -136,42 +184,16 @@ public final class ReceiptParser {
     }
 
     /**
-     * Loyverse emits 0x7F where the peso sign should be. It is replaced by a
-     * space, never removed, because it takes up a column on the paper and
-     * dropping it would shift the rest of the row out of alignment.
+     * Loyverse emits 0x7F where the peso sign belongs, its code page having no
+     * glyph for it. It is replaced by a space, never removed, because it takes
+     * a column on the paper and dropping it shifts the rest of the row.
      */
-    private static String strip(String text) {
+    private static String normalise(String text) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            // Replaced, never removed: it occupies a column on the paper, and
-            // dropping it shifts every following character out of alignment.
             sb.append(c == 0x7F ? ' ' : c);
         }
         return sb.toString();
-    }
-
-    /** The name is everything before the run of spaces that pads the amount. */
-    private static String itemName(String row) {
-        String trimmed = row.trim();
-        if (trimmed.length() == 0 || trimmed.startsWith("-") || trimmed.startsWith("- -")) {
-            return "";
-        }
-        int gap = trimmed.indexOf("   ");
-        String name = gap > 0 ? trimmed.substring(0, gap) : trimmed;
-        name = name.trim();
-        // Totals and payment rows are laid out like items but are not items.
-        String lower = name.toLowerCase();
-        if (lower.equals("total") || lower.equals("cash") || lower.equals("change")
-                || lower.startsWith("employee") || lower.startsWith("pos")) {
-            return "";
-        }
-        return name;
-    }
-
-    private static String trailingAmount(String row) {
-        String trimmed = row.trim();
-        int lastSpace = trimmed.lastIndexOf(' ');
-        return lastSpace >= 0 ? trimmed.substring(lastSpace + 1) : "";
     }
 }

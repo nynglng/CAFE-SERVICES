@@ -1,0 +1,187 @@
+package com.cafeservices.printgateway;
+
+import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
+
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Shows what the printer would have printed.
+ *
+ * The client's printer is Bluetooth and is not here, so until it is, the point
+ * of this screen is to make the intercepted receipt visible: if what appears
+ * here is right, what reaches the paper will be right.
+ */
+public class MainActivity extends Activity {
+
+    /** 58mm paper is 32 characters; 80mm is 48. */
+    private static final int PAPER_WIDTH = 32;
+
+    private TextView statusLine;
+    private TextView addressLine;
+    private TextView jobsView;
+    private Button toggleButton;
+
+    private final BroadcastReceiver jobReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String error = intent.getStringExtra("error");
+            if (error != null) {
+                statusLine.setText("Server error: " + error);
+            }
+            render();
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        statusLine = (TextView) findViewById(R.id.statusLine);
+        addressLine = (TextView) findViewById(R.id.addressLine);
+        jobsView = (TextView) findViewById(R.id.jobsView);
+        toggleButton = (Button) findViewById(R.id.toggleButton);
+
+        toggleButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (PrintServerService.isRunning()) {
+                    stopService(new Intent(MainActivity.this, PrintServerService.class));
+                } else {
+                    startGateway();
+                }
+                jobsView.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        render();
+                    }
+                }, 400);
+            }
+        });
+
+        findViewById(R.id.clearButton).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                PrintServerService.clearJobs();
+                render();
+            }
+        });
+
+        startGateway();
+    }
+
+    private void startGateway() {
+        Intent intent = new Intent(this, PrintServerService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        IntentFilter filter = new IntentFilter(PrintServerService.ACTION_JOB_RECEIVED);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(jobReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(jobReceiver, filter);
+        }
+        render();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        try {
+            unregisterReceiver(jobReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // not registered; nothing to undo
+        }
+    }
+
+    private void render() {
+        boolean running = PrintServerService.isRunning();
+        statusLine.setText(running
+                ? "Listening on port " + PrintServerService.PORT
+                : "Stopped");
+        toggleButton.setText(running ? "Stop" : "Start");
+        addressLine.setText(addresses());
+
+        List<PrintJob> jobs = PrintServerService.jobs();
+        if (jobs.isEmpty()) {
+            jobsView.setText("No print jobs yet.\n\nSend a test print from Loyverse "
+                    + "and the receipt will appear here.");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        synchronized (jobs) {
+            for (PrintJob job : jobs) {
+                sb.append(divider());
+                sb.append(job.time()).append("   ")
+                        .append(job.decoded.byteCount).append(" bytes   from ")
+                        .append(job.source).append('\n');
+                sb.append(divider());
+                sb.append(job.preview(PAPER_WIDTH));
+                if (!job.decoded.events.isEmpty()) {
+                    sb.append('\n');
+                    for (String event : job.decoded.events) {
+                        sb.append("  [").append(event).append("]\n");
+                    }
+                }
+                sb.append('\n');
+            }
+        }
+        jobsView.setText(sb.toString());
+    }
+
+    private static String divider() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < PAPER_WIDTH; i++) {
+            sb.append('-');
+        }
+        return sb.append('\n').toString();
+    }
+
+    /**
+     * Every address this device can be reached on, so the right one can be
+     * typed into Loyverse. Loopback is included because the POS is on this
+     * same device and may be pointed straight at 127.0.0.1.
+     */
+    private String addresses() {
+        StringBuilder sb = new StringBuilder("127.0.0.1  (this device)");
+        try {
+            List<NetworkInterface> nics =
+                    Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface nic : nics) {
+                if (!nic.isUp() || nic.isLoopback()) {
+                    continue;
+                }
+                for (InetAddress addr : Collections.list(nic.getInetAddresses())) {
+                    if (addr.isLoopbackAddress() || addr.getHostAddress().contains(":")) {
+                        continue;
+                    }
+                    sb.append('\n').append(addr.getHostAddress())
+                            .append("  (").append(nic.getName()).append(')');
+                }
+            }
+        } catch (Exception e) {
+            sb.append("\n(could not read interfaces)");
+        }
+        return sb.toString();
+    }
+}

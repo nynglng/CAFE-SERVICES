@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The three things that differ per client, behind one Save.
+ * What differs per client, behind one Save: which cafe, and what its slip says.
  *
  * Nothing is written until Save is pressed, so a half-made change cannot reach
  * a customer's slip - the gateway keeps printing with the old settings while
@@ -34,10 +34,32 @@ public final class SettingsDialog {
     public static void show(final Activity activity, final Runnable onSaved) {
         View view = activity.getLayoutInflater().inflate(R.layout.dialog_settings, null);
 
+        final Spinner siteSpinner = (Spinner) view.findViewById(R.id.siteSpinner);
         final Spinner ssidSpinner = (Spinner) view.findViewById(R.id.ssidSpinner);
         final Spinner accessSpinner = (Spinner) view.findViewById(R.id.accessSpinner);
         final Spinner expirySpinner = (Spinner) view.findViewById(R.id.expirySpinner);
         final TextView preview = (TextView) view.findViewById(R.id.settingsPreview);
+
+        // Sites come from the Omada login, so the list is whatever this
+        // account can see. Stored between runs, so the picker still works when
+        // the phone is offline.
+        final List<String> siteRows = new ArrayList<String>(Settings.knownSites());
+        if (siteRows.isEmpty()) {
+            siteRows.add(Settings.siteId() + "|"
+                    + (Settings.siteName().length() > 0
+                            ? Settings.siteName() : "current site"));
+        }
+        List<String> siteNames = new ArrayList<String>();
+        for (String row : siteRows) {
+            siteNames.add(nameOf(row));
+        }
+        fill(activity, siteSpinner, siteNames);
+        for (int i = 0; i < siteRows.size(); i++) {
+            if (idOf(siteRows.get(i)).equals(Settings.siteId())) {
+                siteSpinner.setSelection(i);
+                break;
+            }
+        }
 
         final List<String> networks = new ArrayList<String>(Settings.networks());
         networks.add(ADD_NETWORK);
@@ -102,6 +124,8 @@ public final class SettingsDialog {
                                 Settings.ACCESS_CHOICES[accessSpinner.getSelectedItemPosition()]);
                         Settings.setExpiryHours(
                                 Settings.EXPIRY_CHOICES[expirySpinner.getSelectedItemPosition()]);
+                        String site = siteRows.get(siteSpinner.getSelectedItemPosition());
+                        Settings.setSite(idOf(site), nameOf(site));
                         onSaved.run();
                     }
                 })
@@ -144,6 +168,17 @@ public final class SettingsDialog {
                     }
                 })
                 .show();
+    }
+
+    /** Sites are stored as "id|name" so one row carries both. */
+    private static String idOf(String row) {
+        int bar = row.indexOf('|');
+        return bar < 0 ? row : row.substring(0, bar);
+    }
+
+    private static String nameOf(String row) {
+        int bar = row.indexOf('|');
+        return bar < 0 ? row : row.substring(bar + 1);
     }
 
     private static void select(Spinner spinner, List<String> values, String value) {

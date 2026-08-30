@@ -12,6 +12,24 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textStyle="bold"
+        android:text="Cafe" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:text="Which Omada site the vouchers are created in." />
+
+    <Spinner
+        android:id="@+id/siteSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="14dp"
+        android:textStyle="bold"
         android:text="Wi-Fi name" />
 
     <Spinner

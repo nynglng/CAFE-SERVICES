@@ -27,6 +27,10 @@ public final class Settings {
     private static final String KEY_ACCESS_HOURS = "accessHours";
     private static final String KEY_EXPIRY_HOURS = "expiryHours";
     private static final String KEY_NETWORKS = "networks";
+    private static final String KEY_ACCOUNT_ID = "omadacId";
+    private static final String KEY_SITE_ID = "siteId";
+    private static final String KEY_SITE_NAME = "siteName";
+    private static final String KEY_SITES = "sites";
 
     /** The client this was built for; the first thing the list should offer. */
     public static final String DEFAULT_SSID = "CAFE";
@@ -41,6 +45,18 @@ public final class Settings {
     /** Offered in the dropdowns. Anything else is typed in as a new network. */
     public static final int[] ACCESS_CHOICES = {1, 2, 3, 4, 6, 8, 12, 24};
     public static final int[] EXPIRY_CHOICES = {6, 12, 24, 48, 72};
+
+    /**
+     * The account and cafe this gateway issues for. Both are learned at
+     * sign-in rather than compiled in - a gateway on one cafe's counter
+     * issuing another cafe's codes would fail silently, since the codes are
+     * created happily and simply do not work on the network in the room.
+     *
+     * The values below are only what a fresh install assumes before anyone has
+     * signed in; the first connection replaces them.
+     */
+    public static final String DEFAULT_ACCOUNT_ID = "<omada-account-id>";
+    public static final String DEFAULT_SITE_ID = "<omada-site-id>";
 
     private static SharedPreferences prefs;
 
@@ -99,6 +115,53 @@ public final class Settings {
         }
         all.add(ssid());
         return new ArrayList<String>(all);
+    }
+
+    public static String accountId() {
+        return prefs == null ? DEFAULT_ACCOUNT_ID
+                : prefs.getString(KEY_ACCOUNT_ID, DEFAULT_ACCOUNT_ID);
+    }
+
+    public static void setAccountId(String value) {
+        if (prefs != null && value != null && value.length() > 0) {
+            prefs.edit().putString(KEY_ACCOUNT_ID, value).apply();
+        }
+    }
+
+    public static String siteId() {
+        return prefs == null ? DEFAULT_SITE_ID : prefs.getString(KEY_SITE_ID, DEFAULT_SITE_ID);
+    }
+
+    /** For the screen: the cafe by name, so a wrong site is obvious. */
+    public static String siteName() {
+        return prefs == null ? "" : prefs.getString(KEY_SITE_NAME, "");
+    }
+
+    public static void setSite(String id, String name) {
+        if (prefs != null && id != null && id.length() > 0) {
+            prefs.edit().putString(KEY_SITE_ID, id)
+                    .putString(KEY_SITE_NAME, name == null ? "" : name).apply();
+        }
+    }
+
+    /**
+     * The cafes this account can see, as "id|name" rows, refreshed whenever
+     * Omada is reachable so the picker works offline too.
+     */
+    public static List<String> knownSites() {
+        List<String> out = new ArrayList<String>();
+        if (prefs == null) {
+            return out;
+        }
+        out.addAll(prefs.getStringSet(KEY_SITES, new LinkedHashSet<String>()));
+        return out;
+    }
+
+    public static void setKnownSites(List<String> rows) {
+        if (prefs != null) {
+            prefs.edit().putStringSet(KEY_SITES,
+                    new LinkedHashSet<String>(rows)).apply();
+        }
     }
 
     public static void rememberNetwork(String value) {

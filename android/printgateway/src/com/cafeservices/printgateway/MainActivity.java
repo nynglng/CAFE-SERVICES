@@ -131,11 +131,17 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 final boolean connected = OmadaSession.isConnected();
+                if (connected) {
+                    // Who we are and which cafe, straight from the session.
+                    OmadaDiscovery.refresh();
+                }
                 omadaLine.post(new Runnable() {
                     @Override
                     public void run() {
+                        String site = Settings.siteName();
                         omadaLine.setText(connected
-                                ? "Omada: connected - vouchers are real"
+                                ? "Omada: " + (site.length() > 0 ? site : "connected")
+                                        + " - vouchers are real"
                                 : "Omada: not connected - tap Omada to sign in");
                         for (PrintJob job : PrintServerService.jobs()) {
                             job.forgetReplica();

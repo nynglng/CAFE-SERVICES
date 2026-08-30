@@ -63,6 +63,7 @@ public class OmadaLoginActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                probe(view);
                 // The page being up is not the same as the controller knowing
                 // us, so this only restarts the polling.
                 handler.removeCallbacks(poll);
@@ -70,6 +71,31 @@ public class OmadaLoginActivity extends Activity {
             }
         });
         web.loadUrl(OmadaSession.PORTAL_URL);
+    }
+
+    /**
+     * Learn the account id from the page.
+     *
+     * Chicken and egg: every API path contains the account id, so it cannot be
+     * fetched from the API before it is known. The portal names its own storage
+     * keys after it - omadaCentralMicroUrl_<account> - so it is read from there
+     * first, and everything else follows from the session.
+     *
+     * Only key NAMES are read. Their values are session material.
+     */
+    private void probe(WebView view) {
+        view.evaluateJavascript(
+                "(function(){var k=[];for(var i=0;i<localStorage.length;i++)"
+                        + "k.push(localStorage.key(i));return k.join(',');})()",
+                new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                        String account = OmadaDiscovery.accountIdFrom(value);
+                        if (account != null) {
+                            Settings.setAccountId(account);
+                        }
+                    }
+                });
     }
 
     @Override

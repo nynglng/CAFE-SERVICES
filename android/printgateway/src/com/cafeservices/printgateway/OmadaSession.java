@@ -38,11 +38,10 @@ public final class OmadaSession {
     public static final String API_BASE =
             "https://aps1-api-omada-essential-controller.tplinkcloud.com";
 
-    /** This account's controller. Paths are {API_BASE}/{OMADAC_ID}/api/v2/... */
-    public static final String OMADAC_ID = "<omada-account-id>";
-
-    /** The Cafe. A second client would be a second site id. */
-    public static final String SITE_ID = "<omada-site-id>";
+    /**
+     * Paths are {API_BASE}/{account}/api/v2/..., and the account and site both
+     * come from whoever signed in - see Settings. Nothing here is compiled in.
+     */
 
     /** Omada says this when the controller no longer knows us. */
     public static final int ERROR_LOGGED_OUT = -1200;
@@ -86,7 +85,7 @@ public final class OmadaSession {
     }
 
     public static String siteBase() {
-        return "/api/v2/hotspot/sites/" + SITE_ID;
+        return "/api/v2/hotspot/sites/" + Settings.siteId();
     }
 
     public static JSONObject get(String path) throws Exception {
@@ -110,7 +109,7 @@ public final class OmadaSession {
      */
     public static JSONObject request(String method, String path, JSONObject body)
             throws Exception {
-        URL url = new URL(API_BASE + "/" + OMADAC_ID + path);
+        URL url = new URL(API_BASE + "/" + Settings.accountId() + path);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         try {
             conn.setRequestMethod(method);

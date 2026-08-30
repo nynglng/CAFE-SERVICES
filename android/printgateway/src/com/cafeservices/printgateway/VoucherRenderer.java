@@ -79,6 +79,41 @@ public final class VoucherRenderer {
     }
 
     /**
+     * The slip printed when Omada could not be reached.
+     *
+     * Never digits. A stand-in code looks exactly like a real one to a guest,
+     * who would type it, fail to get online, and blame the cafe - so the slip
+     * says plainly that the code has to come from a person. The cafe keeps
+     * pre-printed vouchers behind the counter for exactly this.
+     */
+    public static Bitmap renderUnavailable(int count) {
+        Paint titlePaint = paint(TITLE_SIZE, true);
+        Paint detailPaint = paint(DETAIL_SIZE, false);
+
+        List<String> lines = new ArrayList<String>();
+        lines.add("Please ask the cashier");
+        lines.add("for a Wi-Fi voucher");
+        if (count > 1) {
+            lines.add("(" + count + " vouchers paid for)");
+        }
+
+        int height = PAD_TOP + AFTER_TITLE
+                + DETAIL_PITCH * lines.size() + PAD_BOTTOM;
+        Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        int y = PAD_TOP;
+        centre(canvas, title(), y, titlePaint);
+        y += AFTER_TITLE;
+        for (String line : lines) {
+            centre(canvas, line, y, detailPaint);
+            y += DETAIL_PITCH;
+        }
+        return bitmap;
+    }
+
+    /**
      * @param codes        one entry per voucher sold
      * @param ssid         the network name a guest should join
      * @param accessHours  access time, counted from first login

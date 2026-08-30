@@ -61,10 +61,13 @@ public final class PrintJob {
         SalePlan plan = SalePlan.from(receipt);
         Bitmap top = ReceiptRenderer.render(plan, receipt,
                 MainActivity.storeHeader(receipt));
-        Bitmap bottom = plan.printVoucher
-                ? VoucherRenderer.render(codes(plan), Settings.ssid(),
-                        Settings.accessHours(), Settings.expiryHours())
-                : null;
+        Bitmap bottom = null;
+        if (plan.printVoucher) {
+            bottom = hasIssuedCodes()
+                    ? VoucherRenderer.render(issuedCodes, Settings.ssid(),
+                            Settings.accessHours(), Settings.expiryHours())
+                    : VoucherRenderer.renderUnavailable(plan.voucherCount);
+        }
         replicaBitmap = stack(top, bottom);
         return replicaBitmap;
     }
@@ -84,23 +87,6 @@ public final class PrintJob {
     public void forgetReplica() {
         replicaAttempted = false;
         replicaBitmap = null;
-    }
-
-    /**
-     * The codes to print: the ones Omada issued for this sale, or stand-ins
-     * when it could not be reached. Stand-ins are stable per receipt, so the
-     * same sale always previews the same digits.
-     */
-    private List<String> codes(SalePlan plan) {
-        if (hasIssuedCodes()) {
-            return issuedCodes;
-        }
-        List<String> out = new ArrayList<String>();
-        for (int i = 0; i < plan.voucherCount; i++) {
-            int seed = Math.abs((plan.receiptNumber + ":" + i).hashCode()) % 1000000;
-            out.add(String.format(Locale.US, "%06d", seed));
-        }
-        return out;
     }
 
     /** One above the other on the same strip of paper. */

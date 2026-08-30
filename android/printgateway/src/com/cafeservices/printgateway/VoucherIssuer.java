@@ -24,7 +24,21 @@ public final class VoucherIssuer {
     private VoucherIssuer() {
     }
 
-    public static void fill(PrintJob job) {
+    /** One attempt at the codes. False means Omada would not answer. */
+    private static boolean issue(PrintJob job, SalePlan plan) {
+        try {
+            List<String> codes = OmadaClient.issue(plan.voucherCount,
+                    Settings.accessHours(), Settings.expiryHours());
+            job.setIssuedCodes(codes);
+            Log.i(PrintServerService.TAG, "issued " + codes.size() + " voucher(s)");
+            return true;
+        } catch (Exception e) {
+            Log.e(PrintServerService.TAG, "could not issue vouchers: " + e);
+            return false;
+        }
+    }
+
+    public static void fill(PrintJob job, android.content.Context context) {
         ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
         if (receipt.items.isEmpty()) {
             return;
@@ -34,15 +48,14 @@ public final class VoucherIssuer {
             return;
         }
 
-        try {
-            List<String> codes = OmadaClient.issue(plan.voucherCount,
-                    Settings.accessHours(), Settings.expiryHours());
-            job.setIssuedCodes(codes);
-            Log.i(PrintServerService.TAG, "issued " + codes.size() + " voucher(s)");
-        } catch (Exception e) {
-            // The sale carries on with placeholders rather than failing.
-            Log.e(PrintServerService.TAG, "could not issue vouchers: " + e);
-            return;
+        if (!issue(job, plan)) {
+            // A lapsed controller session is the ordinary reason, and it is
+            // fixed by loading the portal again rather than by a person. One
+            // retry: if the account login itself has gone, no amount of
+            // reloading will help and the queue should not be kept waiting.
+            if (!OmadaReconnector.revive(context) || !issue(job, plan)) {
+                return;
+            }
         }
 
         try {

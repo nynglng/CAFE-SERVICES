@@ -46,8 +46,18 @@ public class PrintServerService extends Service {
 
     private static volatile boolean running = false;
 
+    /**
+     * How often to check the Omada session while nothing is being sold.
+     *
+     * The gateway is meant to run a whole shift unattended, so a lapsed session
+     * should be found and fixed between sales rather than discovered by a
+     * customer standing at the counter.
+     */
+    private static final long KEEPALIVE_MS = 15 * 60 * 1000L;
+
     private ServerSocket serverSocket;
     private Thread acceptThread;
+    private Thread keepaliveThread;
 
     public static List<PrintJob> jobs() {
         return JOBS;
@@ -85,7 +95,38 @@ public class PrintServerService extends Service {
         }, "print-accept");
         acceptThread.start();
 
+        keepaliveThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                keepSessionAlive();
+            }
+        }, "omada-keepalive");
+        keepaliveThread.start();
+
         return START_STICKY;
+    }
+
+    /**
+     * Keep the Omada session usable without anyone watching it.
+     *
+     * Only ever revives a session that has actually gone: a working one is left
+     * alone, so this costs one small request every quarter of an hour.
+     */
+    private void keepSessionAlive() {
+        while (running) {
+            try {
+                Thread.sleep(KEEPALIVE_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (!running) {
+                return;
+            }
+            if (!OmadaSession.isConnected()) {
+                OmadaReconnector.revive(this);
+            }
+        }
     }
 
     private void serve() {
@@ -154,7 +195,7 @@ public class PrintServerService extends Service {
                 saveRaw(bytes);
                 // Codes first: they have to be on the paper this sale prints,
                 // and there is no second print to add them to.
-                VoucherIssuer.fill(job);
+                VoucherIssuer.fill(job, this);
                 saveReplica(job);
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");

@@ -8,5 +8,7 @@ android/**/build/
 android/**/debug.keystore
 *.apk
 
-# Captured print streams: real receipts, kept out of git
+# Captured print streams and anything rendered from them: real customer
+# sales, kept out of git entirely.
 *.bin
+captures/

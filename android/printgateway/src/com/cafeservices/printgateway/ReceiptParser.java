@@ -8,36 +8,51 @@ import java.util.regex.Pattern;
 /**
  * Pulls the sale out of a Loyverse text-mode print.
  *
- * With print mode set to Text, Loyverse writes fixed 48-column rows and sends
- * no line breaks between them - the printer is expected to wrap - so the stream
+ * With print mode set to Text, Loyverse writes fixed-width rows and sends no
+ * line breaks between them - the printer is expected to wrap - so the stream
  * has to be re-cut into rows before any of it makes sense.
  *
  * An item spans two or more rows:
  *
- *     seasalt                                   170.00
- *      1 x   170.00
+ *     Truffle                   400.00
+ *      2 x   200.00
  *
  * and a name too long for the field continues on rows of its own before the
  * quantity row arrives.
  *
  * Two details make the parsing reliable. Items begin at column 0, while every
- * other row - Employee, POS, the quantity, Total, Cash - begins with a space.
- * And the name field is a fixed 38 characters, which is what tells us how a
- * wrapped name was broken; see joinName.
+ * other row - Employee, POS, the quantity, Total - begins with a space. And
+ * the name field is a fixed width, which is what tells us how a wrapped name
+ * was broken; see joinName.
+ *
+ * Note that a payment row ("Card", "Gcash") also sits at column 0 and carries
+ * an amount, so it matches the item pattern. It is rejected because no
+ * quantity row follows it - which is why that check is not optional.
  */
 public final class ReceiptParser {
 
-    /** Loyverse's row width in text mode on 80mm paper. */
-    public static final int COLUMNS = 48;
+    /**
+     * Loyverse's row width in text mode on the client's 58mm paper.
+     *
+     * Measured off real captures from the site: dividers are exactly this wide
+     * and amounts are right-aligned to this column. An earlier 48 came from an
+     * 80mm test print, and at that setting NOTHING parses - every item row is
+     * cut in the wrong place - so this constant is load-bearing.
+     */
+    public static final int COLUMNS = 32;
 
     /**
      * Width of the item-name field before the amount column.
      *
-     * Measured from a receipt carrying names far longer than the field. It is
-     * worth re-checking if amounts ever grow wider (a five-figure total, say),
-     * since the field may be sized around them.
+     * Amounts occupy the last 10 columns, right-aligned: "400.00" lands at
+     * 27-32 and the wider "- 30.00" of a discount at 26-32, both inside the
+     * same field. That leaves 22 for the name.
+     *
+     * UNVERIFIED above 22 characters: no captured receipt has a name long
+     * enough to wrap at this width, so the exact break point has not been
+     * seen. Re-check against a long name when one turns up.
      */
-    public static final int NAME_FIELD = 38;
+    public static final int NAME_FIELD = 22;
 
     /** "seasalt                       170.00" - a name and its amount. */
     private static final Pattern ITEM =

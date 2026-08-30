@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
-    /** 80mm paper is 48 characters, which is what Loyverse formats to. */
+    /** The client's 58mm paper is 32 characters, which Loyverse formats to. */
     private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
 
     /** Shown on the voucher slip. Will move into settings. */

@@ -17,7 +17,7 @@ import java.util.List;
  * keeps receipt and voucher reading as a single printout, and means a change to
  * the receipt's type carries here automatically.
  *
- * Widths are pixels, matching ReceiptRenderer: 80mm paper at 203dpi.
+ * Widths are pixels, matching ReceiptRenderer: 58mm paper at 203dpi.
  */
 public final class VoucherRenderer {
 

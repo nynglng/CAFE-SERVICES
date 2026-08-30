@@ -17,37 +17,44 @@ import java.util.List;
  * cannot simply be copied onto a canvas. Names are rebuilt by the parser and
  * re-wrapped here against the real column width.
  *
- * Every measurement below was taken off a captured print (tools/escpos-to-png.mjs):
+ * Every measurement below was taken off real captures from the site with
+ * tools/measure-capture.mjs, which reassembles Loyverse's own graphic output
+ * and reports where the ink actually falls:
  *
- *   paper            576px wide, 80mm at 203dpi
+ *   paper            384px wide, 58mm at 203dpi
  *   left margin      x = 2
- *   amounts          right-aligned to x = 574
- *   name column      wraps at x = 473
- *   body text        17-18px tall, 23px with descenders
+ *   amounts          right-aligned to x = 382, ink starting at x = 295
+ *   name column      wraps at x = 287
+ *   body text        17px tall, 23px with descenders
  *   total row        26px, bold
  *   dividers         dotted, 2-3px tall, full width
  *   line pitch       31px for a wrapped name, 37px to the quantity row,
- *                    55px between items
+ *                    56px between items
+ *
+ * The client's printer is 58mm. An earlier calibration assumed 80mm and every
+ * width here was wrong by a third; the type sizes and line pitches, though,
+ * turned out to be identical between the two - only the widths changed.
  */
 public final class ReceiptRenderer {
 
-    public static final int PAPER_WIDTH = 576;
+    public static final int PAPER_WIDTH = 384;
 
     private static final int MARGIN_LEFT = 2;
-    private static final int MARGIN_RIGHT = 574;
+    private static final int MARGIN_RIGHT = 382;
     /**
-     * Fixed by four measurements taken against the reference print, not picked
-     * by eye. At size 24 our type matches Loyverse's to within 2px, so the
-     * break points are decided entirely by this threshold:
+     * Where a name has to stop so it cannot run into the amount.
      *
-     *   must fit        41 chars of the long unbroken name   475px
-     *   must not fit    42 chars of it                       488px
-     *   must fit        "...be a better person to"           445px
-     *   must not fit    "...be a better person to be"        477px
+     * Measured: on every item row the amount's ink begins at x = 295, and the
+     * longest name seen ("WHITECHOCO ICED16") ends at 239. The old 80mm
+     * calibration put this 8px clear of the amount column, so the same rule
+     * gives 287 here.
      *
-     * which leaves a two-pixel window, and 478 sits in it.
+     * UNVERIFIED: no captured receipt has a name long enough to wrap at 58mm,
+     * so the true break point is only known to lie between 240 and 295. Pin it
+     * properly when a long name turns up - the 80mm value was fixed to a
+     * two-pixel window this way, and this one deserves the same.
      */
-    private static final int NAME_COLUMN_RIGHT = 478;
+    private static final int NAME_COLUMN_RIGHT = 287;
 
     /**
      * Loyverse prints the peso sign before every amount, but sends it as 0x7F
@@ -69,7 +76,7 @@ public final class ReceiptRenderer {
 
     public static final int PITCH_WRAPPED = 31;
     public static final int PITCH_TO_QUANTITY = 37;
-    public static final int PITCH_BETWEEN_ITEMS = 55;
+    public static final int PITCH_BETWEEN_ITEMS = 56;
 
     private ReceiptRenderer() {
     }

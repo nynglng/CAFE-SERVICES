@@ -45,9 +45,20 @@ groups are untouchable. Do not loosen this.
 ## The Android gateway
 
 Loyverse is set to **Text** print mode and points at one Ethernet printer,
-which is the gateway on port 9100. Text mode gives fixed 48-column rows with
-no line breaks — the printer is expected to wrap — so the stream is re-cut into
+which is the gateway on port 9100. Text mode gives fixed-width rows with no
+line breaks — the printer is expected to wrap — so the stream is re-cut into
 rows before anything is read from it.
+
+**The client's paper is 58mm, confirmed by the owner: 32 columns, 384px.** The
+first calibration assumed 80mm (48 columns, 576px) from an early test print,
+and at that width *nothing parses at all* — every item row is cut in the wrong
+place. Real captures from the site are in `captures/` (gitignored: they are
+real customer sales). Inspect them with `tools/inspect-capture.mjs` and measure
+graphic ones with `tools/measure-capture.mjs`.
+
+Useful discovery from the recalibration: **type sizes and line pitches are
+identical between 58mm and 80mm** — only the widths change. Body type is 17px
+tall either way, the total 26px, 37px to the quantity row, 56px between items.
 
 The flow: `EscPosDecoder` → `ReceiptParser` → `SalePlan` → `ReceiptRenderer` +
 `VoucherRenderer`, stacked into one bitmap by `PrintJob.replica()`.
@@ -101,10 +112,22 @@ directory, so the replica can be compared against the real print at any time.
    this, since only the gateway would talk to the printer.
 3. **Multi-voucher layout is unverified.** Only a single-voucher capture has
    been replayed. Ring up a WiFi Voucher with quantity 3 and check the spacing.
-4. **Receipt shapes never seen.** Discounts, variants/modifiers, refunds, a
-   store logo, and five-figure totals could each break the layout. The
-   38-character name field in particular may be sized around amount width, and
-   no amount above `170.00` has been observed.
+4. **Receipt shapes: partly seen now.** Three real sales are captured and all
+   parse correctly at 32 columns. A **PWD discount** appears indented
+   (`| PWD                     - 30.00|`), so it does not match the item
+   pattern and passes through harmlessly — but only that one discount type has
+   been seen. A payment row (`Card`, `Gcash`) *does* sit at column 0 with an
+   amount and matches the item pattern; it is rejected only because no
+   quantity row follows, so do not weaken that check.
+
+   Still unseen: refunds (the amount pattern has no minus sign), variants and
+   modifiers, a store logo (which would make `hasImage()` true and disable the
+   replica entirely), and five-figure totals.
+
+   **`NAME_FIELD` and `NAME_COLUMN_RIGHT` are unverified at 58mm** — no
+   captured receipt has a name long enough to wrap, so the break point is only
+   bounded, not pinned. The 80mm equivalents were fixed to a two-pixel window;
+   these deserve the same once a long name turns up.
 5. **Voucher typography — settled.** The verdict was to match the receipt
    rather than have a look of its own: same fonts, same sizes, keep it simple.
    `VoucherRenderer` now takes both sizes and all three line pitches from

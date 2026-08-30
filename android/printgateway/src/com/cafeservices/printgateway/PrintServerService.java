@@ -149,6 +149,7 @@ public class PrintServerService extends Service {
                 // how you get a parser that works on one receipt and no others,
                 // so real captures are worth more than any amount of inference.
                 saveRaw(bytes);
+                saveReplica(job);
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");
             }
@@ -186,6 +187,44 @@ public class PrintServerService extends Service {
             Log.i(TAG, "saved " + file.getAbsolutePath());
         } catch (Exception e) {
             Log.e(TAG, "could not save raw job: " + e);
+        }
+    }
+
+    /**
+     * Render the receipt as Loyverse would have drawn it and write a PNG
+     * beside the capture, so the replica can be compared with the real thing.
+     */
+    private void saveReplica(PrintJob job) {
+        if (job.hasImage()) {
+            return;
+        }
+        try {
+            ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
+            if (receipt.items.isEmpty()) {
+                return;
+            }
+            SalePlan plan = SalePlan.from(receipt);
+            android.graphics.Bitmap bitmap =
+                    ReceiptRenderer.render(plan, receipt, MainActivity.storeHeader(receipt));
+            if (bitmap == null) {
+                return;
+            }
+            java.io.File dir = new java.io.File(getExternalFilesDir(null), "jobs");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return;
+            }
+            String name = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss-SSS",
+                    java.util.Locale.US).format(new java.util.Date()) + "-replica.png";
+            java.io.File file = new java.io.File(dir, name);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(file);
+            try {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+            } finally {
+                out.close();
+            }
+            Log.i(TAG, "replica " + file.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "replica failed: " + e);
         }
     }
 

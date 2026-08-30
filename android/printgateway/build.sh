@@ -50,7 +50,7 @@ echo "2/6 linking resources"
 
 echo "3/6 compiling java"
 find src "$OUT/gen" -name '*.java' > "$OUT/sources.txt"
-"$JAVAC" -source 8 -target 8 -nowarn \
+"$JAVAC" -source 8 -target 8 -nowarn -encoding UTF-8 \
   -bootclasspath "$ANDROID_JAR" \
   -classpath "$ANDROID_JAR" \
   -d "$OUT/classes" \

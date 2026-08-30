@@ -261,6 +261,20 @@ public class MainActivity extends Activity {
         return String.format(Locale.US, "%06d", seed);
     }
 
+    /** The store name row, which sits centred above everything else. */
+    static String storeHeader(ReceiptParser.Receipt receipt) {
+        for (String row : receipt.rows) {
+            String t = row.trim();
+            if (t.length() == 0) {
+                continue;
+            }
+            if (t.startsWith("Employee") || t.startsWith("POS:")) {
+                break;
+            }
+            return t;
+        }
+        return "";
+    }
     private static String divider() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < PAPER_WIDTH; i++) {

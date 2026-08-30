@@ -35,5 +35,9 @@
         <service
             android:name=".PrintServerService"
             android:exported="false" />
-    </application>
+        <activity
+        android:name=".OmadaLoginActivity"
+        android:label="Connect Omada" />
+
+  </application>
 </manifest>

@@ -23,6 +23,14 @@
         android:text="" />
 
     <TextView
+        android:id="@+id/omadaLine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="6dp"
+        android:textSize="13sp"
+        android:text="Omada: checking..." />
+
+    <TextView
         android:id="@+id/hintLine"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -49,6 +57,13 @@
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:text="Clear" />
+
+        <Button
+            android:id="@+id/omadaButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Omada" />
     </LinearLayout>
 
     <TextView

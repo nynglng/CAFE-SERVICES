@@ -152,6 +152,9 @@ public class PrintServerService extends Service {
                 // how you get a parser that works on one receipt and no others,
                 // so real captures are worth more than any amount of inference.
                 saveRaw(bytes);
+                // Codes first: they have to be on the paper this sale prints,
+                // and there is no second print to add them to.
+                VoucherIssuer.fill(job);
                 saveReplica(job);
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");

@@ -32,8 +32,11 @@ public class MainActivity extends Activity {
 
     private static final int MENU_SETTINGS = 1;
 
+    private static final int OMADA_LOGIN = 1;
+
     private TextView statusLine;
     private TextView addressLine;
+    private TextView omadaLine;
     private TextView jobsView;
     private ImageView receiptImage;
     private Button toggleButton;
@@ -57,6 +60,7 @@ public class MainActivity extends Activity {
 
         statusLine = (TextView) findViewById(R.id.statusLine);
         addressLine = (TextView) findViewById(R.id.addressLine);
+        omadaLine = (TextView) findViewById(R.id.omadaLine);
         jobsView = (TextView) findViewById(R.id.jobsView);
         receiptImage = (ImageView) findViewById(R.id.receiptImage);
         toggleButton = (Button) findViewById(R.id.toggleButton);
@@ -78,6 +82,14 @@ public class MainActivity extends Activity {
             }
         });
 
+        findViewById(R.id.omadaButton).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivityForResult(
+                        new Intent(MainActivity.this, OmadaLoginActivity.class), OMADA_LOGIN);
+            }
+        });
+
         findViewById(R.id.clearButton).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -96,6 +108,43 @@ public class MainActivity extends Activity {
         } else {
             startService(intent);
         }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == OMADA_LOGIN) {
+            checkOmada();
+        }
+    }
+
+    /**
+     * Ask Omada whether we are signed in, off the main thread.
+     *
+     * Shown on the front screen rather than buried in settings: a gateway that
+     * cannot reach Omada still prints receipts, but every voucher on them is a
+     * stand-in, and that should be visible before a queue forms.
+     */
+    private void checkOmada() {
+        omadaLine.setText("Omada: checking...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final boolean connected = OmadaSession.isConnected();
+                omadaLine.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        omadaLine.setText(connected
+                                ? "Omada: connected - vouchers are real"
+                                : "Omada: not connected - tap Omada to sign in");
+                        for (PrintJob job : PrintServerService.jobs()) {
+                            job.forgetReplica();
+                        }
+                        render();
+                    }
+                });
+            }
+        }).start();
     }
 
     @Override
@@ -140,6 +189,7 @@ public class MainActivity extends Activity {
             registerReceiver(jobReceiver, filter);
         }
         render();
+        checkOmada();
     }
 
     @Override

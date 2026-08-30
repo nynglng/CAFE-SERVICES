@@ -22,6 +22,7 @@ public final class PrintJob {
     private boolean renderAttempted;
     private Bitmap replicaBitmap;
     private boolean replicaAttempted;
+    private List<String> issuedCodes;
 
     /** The printed image, or null if this job was plain text. */
     public Bitmap bitmap() {
@@ -68,6 +69,17 @@ public final class PrintJob {
         return replicaBitmap;
     }
 
+    /** Codes Omada issued for this sale, set before the replica is drawn. */
+    public void setIssuedCodes(List<String> codes) {
+        this.issuedCodes = codes;
+        forgetReplica();
+    }
+
+    /** False when Omada could not be reached and the slip shows stand-ins. */
+    public boolean hasIssuedCodes() {
+        return issuedCodes != null && !issuedCodes.isEmpty();
+    }
+
     /** Drop the drawn copy so a settings change shows up on an old job. */
     public void forgetReplica() {
         replicaAttempted = false;
@@ -75,10 +87,14 @@ public final class PrintJob {
     }
 
     /**
-     * Placeholder codes, stable per receipt so the same sale always previews
-     * the same digits. Replaced once Omada issues them for real.
+     * The codes to print: the ones Omada issued for this sale, or stand-ins
+     * when it could not be reached. Stand-ins are stable per receipt, so the
+     * same sale always previews the same digits.
      */
-    private static List<String> codes(SalePlan plan) {
+    private List<String> codes(SalePlan plan) {
+        if (hasIssuedCodes()) {
+            return issuedCodes;
+        }
         List<String> out = new ArrayList<String>();
         for (int i = 0; i < plan.voucherCount; i++) {
             int seed = Math.abs((plan.receiptNumber + ":" + i).hashCode()) % 1000000;

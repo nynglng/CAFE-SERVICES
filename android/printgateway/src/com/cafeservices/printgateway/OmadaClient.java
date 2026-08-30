@@ -245,6 +245,27 @@ public final class OmadaClient {
         return deleted;
     }
 
+    /**
+     * A line for the log: how full the site is, and how much of that this
+     * service is responsible for. If the "ours" count climbs without ever
+     * falling, the ownership rule has stopped matching and cleanup is quietly
+     * doing nothing.
+     */
+    public static String describeSite() throws Exception {
+        int total = 0;
+        int ours = 0;
+        int oursVouchers = 0;
+        for (Group g : listGroups()) {
+            total += g.totalCount;
+            if (ownedByService(g)) {
+                ours++;
+                oursVouchers += g.totalCount;
+            }
+        }
+        return "site holds " + total + "/5000 vouchers; ours: " + ours
+                + " group(s), " + oursVouchers + " voucher(s)";
+    }
+
     /** Stored vouchers across the whole site - the number that hits the cap. */
     public static int storedVouchers() throws Exception {
         int total = 0;

@@ -50,6 +50,10 @@ public final class VoucherIssuer {
             if (deleted > 0) {
                 Log.i(PrintServerService.TAG, "cleanup removed " + deleted + " spent group(s)");
             }
+            // The count against the 5000 cap, and how much of it is ours -
+            // the whole point of the exercise, and the number that would creep
+            // up unnoticed if the ownership rule ever stopped matching.
+            Log.i(PrintServerService.TAG, OmadaClient.describeSite());
         } catch (Exception e) {
             Log.e(PrintServerService.TAG, "cleanup failed: " + e);
         }

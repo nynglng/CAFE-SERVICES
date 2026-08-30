@@ -54,7 +54,8 @@ find src "$OUT/gen" -name '*.java' > "$OUT/sources.txt"
   -bootclasspath "$ANDROID_JAR" \
   -classpath "$ANDROID_JAR" \
   -d "$OUT/classes" \
-  @"$OUT/sources.txt" 2>&1 | grep -v "bootstrap class path" || true
+  @"$OUT/sources.txt" 2> "$OUT/javac.log" || { grep -v "bootstrap class path" "$OUT/javac.log" >&2; echo "COMPILE FAILED" >&2; exit 1; }
+grep -v "bootstrap class path" "$OUT/javac.log" >&2 || true
 
 echo "4/6 dexing"
 "$BT/d8.bat" --min-api 24 --output "$OUT" $(find "$OUT/classes" -name '*.class')

@@ -13,6 +13,8 @@ public final class PrintJob {
 
     public final long receivedAt;
     public final String source;
+    /** Which of the device's addresses the POS printed to. */
+    public final String dialled;
     public final byte[] raw;
     public final EscPosDecoder.Result decoded;
 
@@ -32,11 +34,17 @@ public final class PrintJob {
         return !decoded.rasters.isEmpty();
     }
 
-    public PrintJob(String source, byte[] raw) {
+    public PrintJob(String source, String dialled, byte[] raw) {
         this.receivedAt = System.currentTimeMillis();
         this.source = source;
+        this.dialled = dialled;
         this.raw = raw;
         this.decoded = EscPosDecoder.decode(raw);
+    }
+
+    /** The role configured for the address this job was sent to. */
+    public PrinterRole role() {
+        return PrinterRole.forAddress(dialled);
     }
 
     public String time() {

@@ -109,6 +109,11 @@ public class PrintServerService extends Service {
     private void handleClient(Socket client) {
         String peer = client.getInetAddress() != null
                 ? client.getInetAddress().getHostAddress() : "unknown";
+        // Which of our addresses Loyverse dialled. All of 127.0.0.0/8 is
+        // loopback, so several printers can be configured on this one device
+        // and told apart here, with no network involved at all.
+        String dialled = client.getLocalAddress() != null
+                ? client.getLocalAddress().getHostAddress() : "unknown";
         try {
             client.setSoTimeout(3000);
             InputStream in = client.getInputStream();
@@ -136,9 +141,10 @@ public class PrintServerService extends Service {
 
             if (buffer.size() > 0) {
                 byte[] bytes = buffer.toByteArray();
-                PrintJob job = new PrintJob(peer, bytes);
+                PrintJob job = new PrintJob(peer, dialled, bytes);
                 JOBS.add(0, job);
-                Log.i(TAG, "job from " + peer + ", " + bytes.length + " bytes");
+                Log.i(TAG, "job for " + dialled + " from " + peer + ", "
+                        + bytes.length + " bytes");
                 // Keep the raw stream. Guessing at another vendor's format is
                 // how you get a parser that works on one receipt and no others,
                 // so real captures are worth more than any amount of inference.

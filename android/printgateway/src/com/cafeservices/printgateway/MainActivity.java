@@ -15,8 +15,11 @@ import android.widget.TextView;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Shows what the printer would have printed.
@@ -29,6 +32,10 @@ public class MainActivity extends Activity {
 
     /** 80mm paper is 48 characters, which is what Loyverse formats to. */
     private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
+
+    /** Shown on the voucher slip. Will move into settings. */
+    private static final String SSID = "The Cafe WiFi";
+    private static final int ACCESS_HOURS = 2;
 
     private TextView statusLine;
     private TextView addressLine;
@@ -149,11 +156,13 @@ public class MainActivity extends Activity {
             for (PrintJob job : jobs) {
                 sb.append(divider());
                 sb.append(job.time()).append("   ")
-                        .append(job.decoded.byteCount).append(" bytes   from ")
-                        .append(job.source).append('\n');
+                        .append(job.decoded.byteCount).append(" bytes   -> ")
+                        .append(job.role().label).append(" printer (")
+                        .append(job.dialled).append(")\n");
                 sb.append(divider());
                 sb.append(summarise(job));
                 sb.append(job.preview(PAPER_WIDTH));
+                sb.append(voucherTail(job));
                 if (!job.decoded.events.isEmpty()) {
                     sb.append('\n');
                     for (String event : job.decoded.events) {
@@ -199,6 +208,46 @@ public class MainActivity extends Activity {
         sb.append('\n');
         return sb.toString();
     }
+    /**
+     * The voucher part that would follow the receipt on the same roll.
+     *
+     * The codes are placeholders until voucher issuing is connected; the point
+     * for now is to settle the layout, so what is shown is the real format with
+     * stand-in numbers rather than a sketch of it.
+     */
+    private static String voucherTail(PrintJob job) {
+        if (job.hasImage()) {
+            return "";
+        }
+        ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
+        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
+        if (wifi == null) {
+            wifi = receipt.findItem("wifi");
+        }
+        if (wifi == null) {
+            return "";
+        }
+
+        int quantity = Math.max(1, wifi.wholeQuantity());
+        List<String> codes = new ArrayList<String>();
+        for (int i = 0; i < quantity; i++) {
+            codes.add(placeholderCode(receipt.receiptNumber, i));
+        }
+
+        Date expires = new Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L);
+        StringBuilder sb = new StringBuilder();
+        sb.append('\n');
+        sb.append(VoucherSlip.build(codes, SSID, ACCESS_HOURS, expires, PAPER_WIDTH));
+        sb.append("  (codes above are placeholders until Omada is wired)\n");
+        return sb.toString();
+    }
+
+    /** Stable per receipt, so the same sale always previews the same digits. */
+    private static String placeholderCode(String receiptNumber, int index) {
+        int seed = Math.abs((receiptNumber + ":" + index).hashCode()) % 1000000;
+        return String.format(Locale.US, "%06d", seed);
+    }
+
     private static String divider() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < PAPER_WIDTH; i++) {

@@ -27,8 +27,8 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
-    /** 58mm paper is 32 characters; 80mm is 48. */
-    private static final int PAPER_WIDTH = 32;
+    /** 80mm paper is 48 characters, which is what Loyverse formats to. */
+    private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
 
     private TextView statusLine;
     private TextView addressLine;
@@ -152,6 +152,7 @@ public class MainActivity extends Activity {
                         .append(job.decoded.byteCount).append(" bytes   from ")
                         .append(job.source).append('\n');
                 sb.append(divider());
+                sb.append(summarise(job));
                 sb.append(job.preview(PAPER_WIDTH));
                 if (!job.decoded.events.isEmpty()) {
                     sb.append('\n');
@@ -165,6 +166,39 @@ public class MainActivity extends Activity {
         jobsView.setText(sb.toString());
     }
 
+    /**
+     * What the gateway understood from the sale. This is the part that will
+     * drive voucher issuing, so it is worth seeing plainly next to the receipt
+     * it came from.
+     */
+    private static String summarise(PrintJob job) {
+        if (job.hasImage()) {
+            return "(image receipt - set Loyverse print mode to Text)\n\n";
+        }
+        ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
+        if (receipt.items.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("UNDERSTOOD AS:\n");
+        if (receipt.receiptNumber.length() > 0) {
+            sb.append("  receipt ").append(receipt.receiptNumber).append('\n');
+        }
+        for (ReceiptParser.Item item : receipt.items) {
+            sb.append("  ").append(item.wholeQuantity()).append(" x ")
+                    .append(item.name).append('\n');
+        }
+        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
+        if (wifi == null) {
+            wifi = receipt.findItem("wifi");
+        }
+        if (wifi != null) {
+            sb.append("  -> would issue ").append(wifi.wholeQuantity())
+                    .append(" voucher(s)\n");
+        }
+        sb.append('\n');
+        return sb.toString();
+    }
     private static String divider() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < PAPER_WIDTH; i++) {

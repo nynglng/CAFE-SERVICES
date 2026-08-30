@@ -176,18 +176,29 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * What the gateway understood from the sale. This is the part that will
-     * drive voucher issuing, so it is worth seeing plainly next to the receipt
-     * it came from.
+     * What the gateway understood from the job.
+     *
+     * The two printers are deliberately configured differently. The receipt is
+     * graphic because it is forwarded to the printer untouched and never needs
+     * reading; the voucher ticket is text because it is the one we parse to
+     * learn how many codes to issue.
      */
     private static String summarise(PrintJob job) {
+        PrinterRole role = job.role();
+
         if (job.hasImage()) {
-            return "(image receipt - set Loyverse print mode to Text)\n\n";
+            if (role == PrinterRole.VOUCHER) {
+                return "CANNOT READ THIS: the voucher printer is in graphic mode.\n"
+                        + "Set its print mode to Text so the items can be read.\n\n";
+            }
+            return "Receipt image - forwarded to the printer as-is.\n\n";
         }
+
         ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
         if (receipt.items.isEmpty()) {
             return "";
         }
+
         StringBuilder sb = new StringBuilder();
         sb.append("UNDERSTOOD AS:\n");
         if (receipt.receiptNumber.length() > 0) {
@@ -197,16 +208,18 @@ public class MainActivity extends Activity {
             sb.append("  ").append(item.wholeQuantity()).append(" x ")
                     .append(item.name).append('\n');
         }
-        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
-        if (wifi == null) {
-            wifi = receipt.findItem("wifi");
-        }
+        ReceiptParser.Item wifi = findWifi(receipt);
         if (wifi != null) {
             sb.append("  -> would issue ").append(wifi.wholeQuantity())
                     .append(" voucher(s)\n");
         }
         sb.append('\n');
         return sb.toString();
+    }
+
+    private static ReceiptParser.Item findWifi(ReceiptParser.Receipt receipt) {
+        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
+        return wifi != null ? wifi : receipt.findItem("wifi");
     }
     /**
      * The voucher part that would follow the receipt on the same roll.
@@ -216,7 +229,9 @@ public class MainActivity extends Activity {
      * stand-in numbers rather than a sketch of it.
      */
     private static String voucherTail(PrintJob job) {
-        if (job.hasImage()) {
+        // Only the voucher ticket triggers a slip. The receipt is passed
+        // through untouched, so appending to it would be wrong.
+        if (job.hasImage() || job.role() != PrinterRole.VOUCHER) {
             return "";
         }
         ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);

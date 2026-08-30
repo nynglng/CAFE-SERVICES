@@ -56,14 +56,20 @@ public final class ReceiptRenderer {
      */
     private static final String PESO = "₱";
 
-    /** Chosen so digits measure ~17px tall, matching the captured print. */
-    private static final float BODY_SIZE = 24f;
-    private static final float TOTAL_SIZE = 34f;
+    /**
+     * Chosen so digits measure ~17px tall, matching the captured print.
+     *
+     * The receipt gets by on two sizes: body, and a bold total. The voucher
+     * below it reuses these rather than keeping a scale of its own, so the
+     * whole printout reads as one document and the two cannot drift apart.
+     */
+    public static final float BODY_SIZE = 24f;
+    public static final float TOTAL_SIZE = 34f;
     private static final float HEADER_SIZE = 24f;
 
-    private static final int PITCH_WRAPPED = 31;
-    private static final int PITCH_TO_QUANTITY = 37;
-    private static final int PITCH_BETWEEN_ITEMS = 55;
+    public static final int PITCH_WRAPPED = 31;
+    public static final int PITCH_TO_QUANTITY = 37;
+    public static final int PITCH_BETWEEN_ITEMS = 55;
 
     private ReceiptRenderer() {
     }

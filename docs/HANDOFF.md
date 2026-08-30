@@ -105,5 +105,10 @@ directory, so the replica can be compared against the real print at any time.
    store logo, and five-figure totals could each break the layout. The
    38-character name field in particular may be sized around amount width, and
    no amount above `170.00` has been observed.
-5. **Irene's verdict on the graphic voucher is pending** — she asked to review
-   it before anything else is built on top.
+5. **Voucher typography — settled.** The verdict was to match the receipt
+   rather than have a look of its own: same fonts, same sizes, keep it simple.
+   `VoucherRenderer` now takes both sizes and all three line pitches from
+   `ReceiptRenderer` instead of defining its own, so the two cannot drift apart.
+   The code prints at the receipt's bold total size, the one place that page
+   already shouts; everything else is body size. Rendered but **not yet seen on
+   paper** — it needs a build on the machine with the Android SDK.

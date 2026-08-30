@@ -11,10 +11,11 @@ import java.util.List;
 /**
  * Draws the voucher slip, in the same graphic mode as the receipt above it.
  *
- * This is the piece the customer carries to their table and types off, so the
- * code is set large and alone with nothing crowding it, and everything else -
- * how long the access lasts, which network to join, when the code dies - sits
- * quietly underneath in one size.
+ * Typography is the receipt's, not its own. Everything is set at the receipt's
+ * body size except the code itself, which uses the bold size the receipt gives
+ * its total - the one place that page already shouts. Reusing those two sizes
+ * keeps receipt and voucher reading as a single printout, and means a change to
+ * the receipt's type carries here automatically.
  *
  * Widths are pixels, matching ReceiptRenderer: 80mm paper at 203dpi.
  */
@@ -22,24 +23,25 @@ public final class VoucherRenderer {
 
     private static final int PAPER_WIDTH = ReceiptRenderer.PAPER_WIDTH;
 
-    private static final float LABEL_SIZE = 26f;
-    private static final float CODE_SIZE = 76f;
-    private static final float DETAIL_SIZE = 28f;
-    private static final float COUNT_SIZE = 24f;
+    private static final float LABEL_SIZE = ReceiptRenderer.BODY_SIZE;
+    private static final float CODE_SIZE = ReceiptRenderer.TOTAL_SIZE;
+    private static final float DETAIL_SIZE = ReceiptRenderer.BODY_SIZE;
+    private static final float COUNT_SIZE = ReceiptRenderer.BODY_SIZE;
 
     /**
      * Vertical room around each part, in the order they are drawn. Each is the
-     * step to the next line, so it has to clear the type it follows - the code
-     * is set at 76px, so anything under that would print the validity line
-     * through the middle of it.
+     * step to the next line, so it has to clear the type it follows. These are
+     * the receipt's own pitches: body lines step by PITCH_WRAPPED, the bold
+     * code gets the wider PITCH_TO_QUANTITY, and one voucher is separated from
+     * the next by PITCH_BETWEEN_ITEMS, exactly as two items are on the receipt.
      */
-    private static final int PAD_TOP = 34;
-    private static final int AFTER_COUNT = 34;
-    private static final int AFTER_LABEL = 62;
-    private static final int AFTER_CODE = 104;
-    private static final int DETAIL_PITCH = 36;
-    private static final int GAP_BETWEEN_VOUCHERS = 34;
-    private static final int PAD_BOTTOM = 28;
+    private static final int PAD_TOP = ReceiptRenderer.PITCH_WRAPPED;
+    private static final int AFTER_COUNT = ReceiptRenderer.PITCH_WRAPPED;
+    private static final int AFTER_LABEL = ReceiptRenderer.PITCH_TO_QUANTITY;
+    private static final int AFTER_CODE = ReceiptRenderer.PITCH_BETWEEN_ITEMS;
+    private static final int DETAIL_PITCH = ReceiptRenderer.PITCH_WRAPPED;
+    private static final int GAP_BETWEEN_VOUCHERS = ReceiptRenderer.PITCH_BETWEEN_ITEMS;
+    private static final int PAD_BOTTOM = ReceiptRenderer.PITCH_WRAPPED;
 
     private VoucherRenderer() {
     }

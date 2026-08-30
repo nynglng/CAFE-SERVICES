@@ -135,9 +135,14 @@ public class PrintServerService extends Service {
             }
 
             if (buffer.size() > 0) {
-                PrintJob job = new PrintJob(peer, buffer.toByteArray());
+                byte[] bytes = buffer.toByteArray();
+                PrintJob job = new PrintJob(peer, bytes);
                 JOBS.add(0, job);
-                Log.i(TAG, "job from " + peer + ", " + buffer.size() + " bytes");
+                Log.i(TAG, "job from " + peer + ", " + bytes.length + " bytes");
+                // Keep the raw stream. Guessing at another vendor's format is
+                // how you get a parser that works on one receipt and no others,
+                // so real captures are worth more than any amount of inference.
+                saveRaw(bytes);
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");
             }
@@ -149,6 +154,32 @@ public class PrintServerService extends Service {
             } catch (Exception ignored) {
                 // closing a already-broken socket is not interesting
             }
+        }
+    }
+
+    /**
+     * Write the untouched bytes to external files, where adb can pull them
+     * without root or run-as:
+     *   /sdcard/Android/data/com.cafeservices.printgateway/files/jobs/
+     */
+    private void saveRaw(byte[] bytes) {
+        try {
+            java.io.File dir = new java.io.File(getExternalFilesDir(null), "jobs");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return;
+            }
+            String name = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss-SSS",
+                    java.util.Locale.US).format(new java.util.Date()) + ".bin";
+            java.io.File file = new java.io.File(dir, name);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(file);
+            try {
+                out.write(bytes);
+            } finally {
+                out.close();
+            }
+            Log.i(TAG, "saved " + file.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "could not save raw job: " + e);
         }
     }
 

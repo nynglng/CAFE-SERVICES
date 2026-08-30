@@ -161,8 +161,7 @@ public class MainActivity extends Activity {
                         .append(job.dialled).append(")\n");
                 sb.append(divider());
                 sb.append(summarise(job));
-                sb.append(job.preview(PAPER_WIDTH));
-                sb.append(voucherTail(job));
+                sb.append(composed(job));
                 if (!job.decoded.events.isEmpty()) {
                     sb.append('\n');
                     for (String event : job.decoded.events) {
@@ -176,18 +175,15 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * What the gateway understood from the job.
+     * What the gateway understood, and what it would print.
      *
-     * The two printers are deliberately configured differently. The receipt is
-     * graphic because it is forwarded to the printer untouched and never needs
-     * reading; the voucher ticket is text because it is the one we parse to
-     * learn how many codes to issue.
+     * The receipt is graphic because it is forwarded untouched and never needs
+     * reading; the voucher ticket is text because it is the one parsed to work
+     * out how many codes to issue.
      */
     private static String summarise(PrintJob job) {
-        PrinterRole role = job.role();
-
         if (job.hasImage()) {
-            if (role == PrinterRole.VOUCHER) {
+            if (job.role() == PrinterRole.VOUCHER) {
                 return "CANNOT READ THIS: the voucher printer is in graphic mode.\n"
                         + "Set its print mode to Text so the items can be read.\n\n";
             }
@@ -198,6 +194,7 @@ public class MainActivity extends Activity {
         if (receipt.items.isEmpty()) {
             return "";
         }
+        SalePlan plan = SalePlan.from(receipt);
 
         StringBuilder sb = new StringBuilder();
         sb.append("UNDERSTOOD AS:\n");
@@ -206,14 +203,13 @@ public class MainActivity extends Activity {
         }
         for (ReceiptParser.Item item : receipt.items) {
             sb.append("  ").append(item.wholeQuantity()).append(" x ")
-                    .append(item.name).append('\n');
+                    .append(item.name);
+            if (SalePlan.isWifi(item.name)) {
+                sb.append("   <- WiFi");
+            }
+            sb.append('\n');
         }
-        ReceiptParser.Item wifi = findWifi(receipt);
-        if (wifi != null) {
-            sb.append("  -> would issue ").append(wifi.wholeQuantity())
-                    .append(" voucher(s)\n");
-        }
-        sb.append('\n');
+        sb.append("WILL PRINT: ").append(plan.describe()).append("\n\n");
         return sb.toString();
     }
 
@@ -222,38 +218,40 @@ public class MainActivity extends Activity {
         return wifi != null ? wifi : receipt.findItem("wifi");
     }
     /**
-     * The voucher part that would follow the receipt on the same roll.
+     * The full output for a job: what the paper would actually say.
      *
-     * The codes are placeholders until voucher issuing is connected; the point
-     * for now is to settle the layout, so what is shown is the real format with
-     * stand-in numbers rather than a sketch of it.
+     * Driven entirely by what was sold, not by which printer was dialled, so a
+     * single gateway printer works as well as a split pair.
      */
-    private static String voucherTail(PrintJob job) {
-        // Only the voucher ticket triggers a slip. The receipt is passed
-        // through untouched, so appending to it would be wrong.
-        if (job.hasImage() || job.role() != PrinterRole.VOUCHER) {
-            return "";
+    private static String composed(PrintJob job) {
+        if (job.hasImage()) {
+            return job.preview(PAPER_WIDTH);
         }
         ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
-        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
-        if (wifi == null) {
-            wifi = receipt.findItem("wifi");
-        }
-        if (wifi == null) {
-            return "";
+        if (receipt.items.isEmpty()) {
+            return job.preview(PAPER_WIDTH);
         }
 
-        int quantity = Math.max(1, wifi.wholeQuantity());
-        List<String> codes = new ArrayList<String>();
-        for (int i = 0; i < quantity; i++) {
-            codes.add(placeholderCode(receipt.receiptNumber, i));
-        }
-
-        Date expires = new Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L);
+        SalePlan plan = SalePlan.from(receipt);
         StringBuilder sb = new StringBuilder();
-        sb.append('\n');
-        sb.append(VoucherSlip.build(codes, SSID, ACCESS_HOURS, expires, PAPER_WIDTH));
-        sb.append("  (codes above are placeholders until Omada is wired)\n");
+
+        if (plan.printReceipt) {
+            for (String row : plan.receiptRows) {
+                sb.append(row).append('\n');
+            }
+        }
+
+        if (plan.printVoucher) {
+            List<String> codes = new ArrayList<String>();
+            for (int i = 0; i < plan.voucherCount; i++) {
+                codes.add(placeholderCode(plan.receiptNumber, i));
+            }
+            Date expires = new Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L);
+            sb.append('\n');
+            sb.append(VoucherSlip.build(codes, SSID, ACCESS_HOURS, expires, PAPER_WIDTH));
+            sb.append("  (codes are placeholders until Omada is wired)\n");
+        }
+
         return sb.toString();
     }
 

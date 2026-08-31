@@ -429,31 +429,6 @@ public final class ReceiptRenderer {
         return sb.toString();
     }
 
-    private static List<String[]> totalRows(ReceiptParser.Receipt receipt) {
-        List<String[]> out = new ArrayList<String[]>();
-        for (String row : receipt.rows) {
-            String t = row.trim();
-            for (String label : new String[]{"Total", "Cash", "Change"}) {
-                if (t.startsWith(label)) {
-                    String amount = t.substring(label.length()).trim();
-                    out.add(new String[]{label, amount});
-                }
-            }
-        }
-        return out;
-    }
-
-    private static String footerLeft(ReceiptParser.Receipt receipt) {
-        for (String row : receipt.rows) {
-            String t = row.trim();
-            if (t.contains("/") && t.contains(":") && receipt.receiptNumber.length() > 0
-                    && t.endsWith(receipt.receiptNumber)) {
-                return t.substring(0, t.length() - receipt.receiptNumber.length()).trim();
-            }
-        }
-        return "";
-    }
-
     /**
      * Wrap to the column width in pixels, breaking at spaces where possible and
      * mid-word only when a single word will not fit - which is what Loyverse's

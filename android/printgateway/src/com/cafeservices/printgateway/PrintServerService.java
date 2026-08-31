@@ -150,6 +150,32 @@ public class PrintServerService extends Service {
         }
     }
 
+    /**
+     * How long to wait on a silent socket before calling the job finished.
+     *
+     * Only a fallback now that a cut ends the job. It used to be 3000ms and
+     * that was the single biggest part of the wait at the counter, because
+     * Loyverse holds the connection open after sending.
+     */
+    private static final int IDLE_END_MS = 1200;
+
+    /**
+     * Whether the stream has just ended with a paper cut.
+     *
+     * Checked only against the tail, because raster data can contain these
+     * bytes anywhere; a cut is always the last thing sent. Covers the
+     * three-byte forms (GS V 0 / 1) and the four-byte ones (GS V A n, GS V B
+     * n) - Loyverse sends GS V B 0.
+     */
+    private static boolean endsWithCut(ByteArrayOutputStream buffer) {
+        byte[] b = buffer.toByteArray();
+        int n = b.length;
+        if (n >= 3 && b[n - 3] == 0x1D && b[n - 2] == 0x56) {
+            return true;
+        }
+        return n >= 4 && b[n - 4] == 0x1D && b[n - 3] == 0x56;
+    }
+
     private void handleClient(Socket client) {
         String peer = client.getInetAddress() != null
                 ? client.getInetAddress().getHostAddress() : "unknown";
@@ -159,14 +185,18 @@ public class PrintServerService extends Service {
         String dialled = client.getLocalAddress() != null
                 ? client.getLocalAddress().getHostAddress() : "unknown";
         try {
-            client.setSoTimeout(3000);
+            client.setSoTimeout(IDLE_END_MS);
             InputStream in = client.getInputStream();
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             byte[] chunk = new byte[4096];
 
-            // A print ends when the POS closes the socket. Some clients hold it
-            // open, so a read timeout with data already buffered also counts as
-            // the end of the job rather than an error.
+            // A print ends when the POS closes the socket - but Loyverse does
+            // not always close it, and waiting for a timeout to decide meant
+            // the cashier stood there for whole seconds after the last byte
+            // had arrived. Every ESC/POS job ends with a cut, so the cut is
+            // the end of the job: stop the moment one lands. The idle timeout
+            // stays as a fallback for a stream that carries no cut at all.
+            long firstByteAt = 0;
             while (true) {
                 int n;
                 try {
@@ -180,8 +210,15 @@ public class PrintServerService extends Service {
                 if (n < 0) {
                     break;
                 }
+                if (firstByteAt == 0) {
+                    firstByteAt = System.currentTimeMillis();
+                }
                 buffer.write(chunk, 0, n);
+                if (endsWithCut(buffer)) {
+                    break;
+                }
             }
+            long readDoneAt = System.currentTimeMillis();
 
             if (buffer.size() > 0) {
                 byte[] bytes = buffer.toByteArray();
@@ -195,9 +232,21 @@ public class PrintServerService extends Service {
                 saveRaw(bytes);
                 // Codes first: they have to be on the paper this sale prints,
                 // and there is no second print to add them to.
+                long t0 = System.currentTimeMillis();
                 VoucherIssuer.fill(job, this);
+                long t1 = System.currentTimeMillis();
                 saveReplica(job);
+                long t2 = System.currentTimeMillis();
                 sendToPrinter(job);
+                long t3 = System.currentTimeMillis();
+                // Where the cashier's wait actually goes. Read this after a
+                // real sale before optimising anything - the parts are not the
+                // sizes you would guess.
+                Log.i(TAG, "timing: read " + (readDoneAt - firstByteAt)
+                        + "ms, vouchers " + (t1 - t0)
+                        + "ms, render " + (t2 - t1)
+                        + "ms, print " + (t3 - t2)
+                        + "ms, total " + (t3 - firstByteAt) + "ms");
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");
             }

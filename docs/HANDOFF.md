@@ -1,4 +1,4 @@
-# Handoff — 31 August 2026 (the gateway issues real vouchers)
+# Handoff — 31 August 2026 (deployed, printing real vouchers at the counter)
 
 Where the project stands, so work can resume on another machine without
 re-deriving any of it.
@@ -171,19 +171,74 @@ receipt number off; they fall back to `SplitSales`, which matches on items and
 total (never the payment rows) and only ever applies to receipts carrying an
 "Amount due" row.
 
+## It is live, and what the counter said about it
+
+The gateway went into the cafe and printed real vouchers on the real printer
+(a JK-5802H, 58mm, 60mm/s, USB+BT). Two complaints came back, both since
+addressed. Do not undo any of this without measuring first.
+
+**It printed lighter than Loyverse.** `INK_THRESHOLD` sat at mid-grey, which
+throws away most of the antialiased edge of every glyph. Counted against a real
+Loyverse print of the same receipt we burned 0.889x its ink per row; at 160 we
+burn 0.996x. `tools/ink-compare.mjs` re-measures this — it decodes a Loyverse
+capture and our replica PNG and counts dots at several cuts.
+
+**A sale took about five seconds.** Almost none of it was work: instrumented,
+the gateway's own decode, render and encode come to ~95ms. It was all waiting,
+in four places:
+
+- *Deciding the job had ended.* A 3000ms read timeout, paid in full on every
+  print because Loyverse holds the socket open. Every ESC/POS job ends with a
+  cut, so the cut now ends the job; the timeout is a 1200ms fallback.
+- *Dialling Omada.* `request()` called `disconnect()` in a `finally`, which is
+  HttpURLConnection's way of discarding the socket, so both calls of an issue
+  paid a fresh TCP connect and TLS handshake to Singapore. It now disconnects
+  only on failure. The existing keepalive moved from 15 minutes to 45 seconds
+  so the pooled connection is still open when a sale arrives.
+- *Dialling the printer.* An RFCOMM connect on every single receipt, which is
+  the best part of a second or two. The link is now opened once and kept, with
+  one retry on a failed write. `DRAIN_MS` went with it — that 600ms existed
+  only to let the printer catch up before the socket closed, and it no longer
+  closes.
+- *Sending three times more than needed.* Every band went full width, blank
+  paper included, and a receipt is about 60% blank rows. Loyverse encodes its
+  gaps as bands one byte wide; we now do the same and trim content bands to
+  their right edge. The same page dropped from 45.0 KB to 13.9 KB against
+  Loyverse's own 14.4 KB, verified by round-tripping a replica through the new
+  packing and decoding it back — 954px of paper either way, zero pixels
+  different.
+
+Also: `handleClient` ran on the accept thread, so the gateway accepted nothing
+while a job issued and printed; jobs now get their own thread. And the screen
+only learned of a job after it finished printing, which reads as a gateway slow
+to accept it — it now says so on arrival.
+
+**Vouchers are deliberately NOT pre-issued.** Pooling codes would take the
+Omada call off the critical path, but the 24 hour expiry starts at creation, so
+a code minted in the morning would hand an evening customer a few hours while
+the slip promises a day. Irene rejected it for that reason and she is right.
+The generation process is untouched; only the plumbing under it got faster.
+
+**The timing line is the tool for any further work here.** Every job logs
+`connect->data`, `read`, `vouchers`, `render`, `print` and a total, and
+BluetoothPrinter logs whether the link was reused or reopened and how long each
+took. Read those from a real sale before optimising anything — every guess made
+about this so far has been wrong, and the parts are not the sizes they look.
+
+**Still unmeasured on the new build:** nobody has yet done a sale on it and
+read the timing line. That is the first thing to do. If `vouchers` is still
+over a second the connection-pooling theory is wrong and the call needs timing
+directly.
+
 ## Open, in the order it matters
 
-1. **The Bluetooth printer has never been in hand.** Everything up to the wire
-   is verified - the gateway re-encodes the receipt as Loyverse does (drawer
-   pulse mirrored, ESC @, GS v 0 bands, feed, GS V B 0) and each job writes the
-   bytes it would send, which decode back to the right picture. What is
-   unproven is the sending: chunked RFCOMM writes with pauses, no printer ever
-   on the other end.
-2. **Nothing has been on paper.** Every check is against Loyverse's own graphic
-   output, which is the right reference, but no physical print has been
-   compared. The voucher's longest line, `WILL EXPIRE AFTER 24 HOURS`, is
-   ~341px on 384px paper - the tightest thing on the page and the first to
-   check.
+1. **Time one sale on the current build.** Everything above is reasoned from
+   measurements of the old one. Do a sale and a reprint back to back - the
+   reprint should reuse the open printer link and be visibly quicker - then
+   read the timing line before changing anything else.
+2. **Multi-voucher spacing has never been on paper.** Single vouchers print
+   correctly at the counter. Two and three render, but nothing above one has
+   been physically printed.
 3. **The phone must stay awake and charged.** The service is foreground and
    START_STICKY, but no work has been done on battery optimisation, and the
    staff will not be taught to restart anything.

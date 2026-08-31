@@ -13,6 +13,8 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Collections;
@@ -28,12 +30,15 @@ import java.util.List;
 public class MainActivity extends Activity {
 
     private static final int MENU_SETTINGS = 1;
+    private static final int MENU_PRINTER = 2;
+    private static final int PERMISSIONS = 7;
 
     private static final int OMADA_LOGIN = 1;
 
     private TextView statusLine;
     private TextView addressLine;
     private TextView omadaLine;
+    private TextView printerLine;
     private TextView emptyView;
     private ImageView receiptImage;
     private Button toggleButton;
@@ -58,6 +63,7 @@ public class MainActivity extends Activity {
         statusLine = (TextView) findViewById(R.id.statusLine);
         addressLine = (TextView) findViewById(R.id.addressLine);
         omadaLine = (TextView) findViewById(R.id.omadaLine);
+        printerLine = (TextView) findViewById(R.id.printerLine);
         emptyView = (TextView) findViewById(R.id.emptyView);
         receiptImage = (ImageView) findViewById(R.id.receiptImage);
         toggleButton = (Button) findViewById(R.id.toggleButton);
@@ -116,6 +122,36 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Bluetooth needs asking for, and what to ask for changed in Android 12.
+     *
+     * @return true when the picker can be opened now; false while the
+     *         permission dialog is up, in which case the operator taps again
+     */
+    private boolean askForBluetooth() {
+        List<String> wanted = new ArrayList<String>();
+        if (Build.VERSION.SDK_INT >= 31) {
+            wanted.add("android.permission.BLUETOOTH_CONNECT");
+            wanted.add("android.permission.BLUETOOTH_SCAN");
+        } else {
+            // Pre-12, finding a printer counts as finding a location.
+            wanted.add(android.Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+
+        List<String> missing = new ArrayList<String>();
+        for (String permission : wanted) {
+            if (checkSelfPermission(permission)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                missing.add(permission);
+            }
+        }
+        if (missing.isEmpty()) {
+            return true;
+        }
+        requestPermissions(missing.toArray(new String[missing.size()]), PERMISSIONS);
+        return false;
+    }
+
+    /**
      * Ask Omada whether we are signed in, off the main thread.
      *
      * Shown on the front screen rather than buried in settings: a gateway that
@@ -151,13 +187,26 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        menu.add(0, MENU_SETTINGS, 0, "Settings")
+        menu.add(0, MENU_PRINTER, 0, "Printer")
+                .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, MENU_SETTINGS, 1, "Settings")
                 .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(android.view.MenuItem item) {
+        if (item.getItemId() == MENU_PRINTER) {
+            if (askForBluetooth()) {
+                PrinterPicker.show(this, new Runnable() {
+                    @Override
+                    public void run() {
+                        render();
+                    }
+                });
+            }
+            return true;
+        }
         if (item.getItemId() != MENU_SETTINGS) {
             return super.onOptionsItemSelected(item);
         }
@@ -211,6 +260,10 @@ public class MainActivity extends Activity {
                 : "Stopped");
         toggleButton.setText(running ? "Stop" : "Start");
         addressLine.setText(addresses());
+        String printer = Settings.printerName();
+        printerLine.setText(printer.length() > 0
+                ? "Printer: " + printer
+                : "Printer: none chosen - tap Printer above");
 
         List<PrintJob> jobs = PrintServerService.jobs();
 

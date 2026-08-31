@@ -31,6 +31,14 @@
         android:text="Omada: checking..." />
 
     <TextView
+        android:id="@+id/printerLine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="2dp"
+        android:textSize="13sp"
+        android:text="Printer: none chosen" />
+
+    <TextView
         android:id="@+id/hintLine"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

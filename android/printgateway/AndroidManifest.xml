@@ -8,6 +8,18 @@
 
     <!-- The gateway is a TCP server on the device; Loyverse connects to it. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Talking to the receipt printer. The first two are how Android 11 and
+         earlier spell it, the last two how Android 12 onwards does. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- Discovery counts as location on Android 11 and earlier. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Printing must survive the POS being in the foreground, so the listener

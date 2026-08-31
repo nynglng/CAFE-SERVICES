@@ -197,6 +197,7 @@ public class PrintServerService extends Service {
                 // and there is no second print to add them to.
                 VoucherIssuer.fill(job, this);
                 saveReplica(job);
+                sendToPrinter(job);
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 updateNotification(JOBS.size() + " job(s) received");
             }
@@ -212,18 +213,58 @@ public class PrintServerService extends Service {
     }
 
     /**
+     * Hand the finished print to the cafe's printer.
+     *
+     * What goes out is the redrawn receipt re-encoded the way Loyverse encodes
+     * its own graphic prints. A job we could not redraw - an image, or
+     * something with no items in it - is forwarded byte for byte instead:
+     * whatever Loyverse meant by it, the printer already understood it.
+     *
+     * The drawer pulse is mirrored rather than assumed. Loyverse opens a sale's
+     * print with one, and a till that stopped opening because the gateway was
+     * put in front of it would be a strange thing to have to debug.
+     */
+    private void sendToPrinter(PrintJob job) {
+        byte[] payload;
+        android.graphics.Bitmap replica = job.replica();
+        if (replica != null) {
+            payload = EscPosEncoder.encode(replica,
+                    job.decoded.events.contains("cash drawer pulse"));
+        } else {
+            payload = job.raw;
+        }
+        // Kept beside the capture: with no printer chosen this is the only
+        // way to see what would have gone down the wire, and with one it is
+        // still the record of what did.
+        saveBytes(payload, "-print.bin");
+
+        if (Settings.printerAddress().length() == 0) {
+            return;
+        }
+        String problem = BluetoothPrinter.send(this, payload);
+        if (problem != null) {
+            Log.e(TAG, "could not print: " + problem);
+            broadcastError("printer: " + problem);
+        }
+    }
+
+    /**
      * Write the untouched bytes to external files, where adb can pull them
      * without root or run-as:
      *   /sdcard/Android/data/com.cafeservices.printgateway/files/jobs/
      */
     private void saveRaw(byte[] bytes) {
+        saveBytes(bytes, ".bin");
+    }
+
+    private void saveBytes(byte[] bytes, String suffix) {
         try {
             java.io.File dir = new java.io.File(getExternalFilesDir(null), "jobs");
             if (!dir.exists() && !dir.mkdirs()) {
                 return;
             }
             String name = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss-SSS",
-                    java.util.Locale.US).format(new java.util.Date()) + ".bin";
+                    java.util.Locale.US).format(new java.util.Date()) + suffix;
             java.io.File file = new java.io.File(dir, name);
             java.io.FileOutputStream out = new java.io.FileOutputStream(file);
             try {

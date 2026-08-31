@@ -31,6 +31,8 @@ public final class Settings {
     private static final String KEY_SITE_ID = "siteId";
     private static final String KEY_SITE_NAME = "siteName";
     private static final String KEY_SITES = "sites";
+    private static final String KEY_PRINTER_NAME = "printerName";
+    private static final String KEY_PRINTER_ADDRESS = "printerAddress";
 
     /** The client this was built for; the first thing the list should offer. */
     public static final String DEFAULT_SSID = "CAFE";
@@ -161,6 +163,22 @@ public final class Settings {
         if (prefs != null) {
             prefs.edit().putStringSet(KEY_SITES,
                     new LinkedHashSet<String>(rows)).apply();
+        }
+    }
+
+    /** The Bluetooth printer this gateway prints to; empty until chosen. */
+    public static String printerName() {
+        return prefs == null ? "" : prefs.getString(KEY_PRINTER_NAME, "");
+    }
+
+    public static String printerAddress() {
+        return prefs == null ? "" : prefs.getString(KEY_PRINTER_ADDRESS, "");
+    }
+
+    public static void setPrinter(String name, String address) {
+        if (prefs != null) {
+            prefs.edit().putString(KEY_PRINTER_NAME, name == null ? "" : name)
+                    .putString(KEY_PRINTER_ADDRESS, address == null ? "" : address).apply();
         }
     }
 

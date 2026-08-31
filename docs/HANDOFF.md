@@ -1,4 +1,4 @@
-# Handoff — 30 August 2026 (updated after the 58mm recalibration)
+# Handoff — 31 August 2026 (the gateway issues real vouchers)
 
 Where the project stands, so work can resume on another machine without
 re-deriving any of it.
@@ -11,10 +11,12 @@ issues Omada voucher codes for it, and prints the codes underneath.
 
 Two halves, both in this repo:
 
-- `src/`, `tools/` — a Node service that talks to Omada Cloud and issues
-  vouchers. Runs on a PC. Works today.
-- `android/printgateway/` — the print gateway, an Android app. Works today
-  except that the codes it prints are placeholders.
+- `android/printgateway/` — the print gateway, an Android app. **This is the
+  product.** It signs into Omada itself, issues real codes per sale, redraws
+  the receipt, and sends the result to a Bluetooth printer.
+- `src/`, `tools/` — the original Node service, which does the same thing from
+  a PC through a signed-in Chrome profile. Still works, still the place the
+  API was worked out, but no longer on the critical path.
 
 ## Omada: settled, do not re-litigate
 
@@ -132,37 +134,73 @@ Git Bash, `export MSYS_NO_PATHCONV=1` or the device paths get mangled.
 Every job writes its raw bytes and a `-replica.png` to that same `jobs/`
 directory, so the replica can be compared against the real print at any time.
 
+## How the phone holds an Omada session
+
+The app signs in through a WebView (`OmadaLoginActivity`) and keeps the
+cookies; `OmadaSession` calls the portal's own JSON API with them. Account and
+site are read from `/api/v2/users/current` rather than compiled in - a site id
+belonging to the wrong cafe fails silently, since codes are created happily and
+simply do not work on the network in the room.
+
+The account login is durable: it survived a force-stop and nine hours closed
+overnight. The controller session underneath is not, and lapsing shows up as
+errorCode -1200. `OmadaReconnector` loads the portal out of sight and retries;
+a keepalive checks every 15 minutes between sales. That only works while the
+account login holds - when TP-Link expires it, someone must sign in via OMADA.
+
+When no codes can be had, the slip says "Please ask cashier for a wi-fi
+voucher" and nothing else. It must never print invented digits: they look
+exactly like real codes to a guest, who would type them, fail, and blame the
+cafe.
+
+## One sale, one set of codes
+
+Two things print the same sale twice, and both were caught on the counter:
+
+- **A split bill** prints one receipt per payment, each carrying the whole item
+  list. Three vouchers paid half cash, half card issued three codes and then
+  another three. The halves are indistinguishable - same items, same total,
+  same time, both carrying "Amount due", only the payment line differs - so
+  there is no final half to hold codes back for.
+- **A reprint** of the same receipt would do the same.
+
+Both are handled by naming the group after the sale: `POS-<receipt>-<stamp>`.
+A sale that already bought vouchers is found by asking Omada, so this survives
+a restart or a reinstall. Split halves are the one case Loyverse leaves the
+receipt number off; they fall back to `SplitSales`, which matches on items and
+total (never the payment rows) and only ever applies to receipts carrying an
+"Amount due" row.
+
 ## Open, in the order it matters
 
-1. **Voucher codes on the phone.** The biggest unknown, and now the main thing
-   standing between this and a real deployment. Omada issuing runs on a PC
-   through a real Chrome profile; the phone has none. Likely path is a WebView
-   holding the session, unproven. Until then the gateway prints placeholder
-   codes derived from the receipt number.
-2. **Bluetooth printer.** The gateway renders but does not transmit — the
-   printer is at the client and has never been in hand. Risk: contention if
-   Loyverse holds the connection open. The single-gateway design mitigates
-   this, since only the gateway would talk to the printer.
-3. **Nothing has been on paper yet.** Every check so far is against Loyverse's
-   own graphic output, which is the right reference, but no physical print has
-   been compared. The voucher's longest line, `WILL EXPIRE AFTER 24 HOURS`,
-   comes to ~341px on 384px paper — 21px each side, the tightest thing on the
-   page and the first to check.
-4. **Receipt shapes still unseen.** Refunds (the amount pattern has no minus
-   sign, though a `- 30.00` discount does render correctly), variants and
+1. **The Bluetooth printer has never been in hand.** Everything up to the wire
+   is verified - the gateway re-encodes the receipt as Loyverse does (drawer
+   pulse mirrored, ESC @, GS v 0 bands, feed, GS V B 0) and each job writes the
+   bytes it would send, which decode back to the right picture. What is
+   unproven is the sending: chunked RFCOMM writes with pauses, no printer ever
+   on the other end.
+2. **Nothing has been on paper.** Every check is against Loyverse's own graphic
+   output, which is the right reference, but no physical print has been
+   compared. The voucher's longest line, `WILL EXPIRE AFTER 24 HOURS`, is
+   ~341px on 384px paper - the tightest thing on the page and the first to
+   check.
+3. **The phone must stay awake and charged.** The service is foreground and
+   START_STICKY, but no work has been done on battery optimisation, and the
+   staff will not be taught to restart anything.
+4. **1913 legacy Permanent vouchers** still sit on the site and can never
+   expire; cleanup will not touch them, by design. They are 38% of the 5000
+   cap. Deleting them is a job for the portal, by hand, when convenient.
+5. **Receipt shapes still unseen.** Refunds (the amount pattern has no minus
+   sign, though a `- 30.00` discount renders correctly), variants and
    modifiers, a store logo (which would make `hasImage()` true and disable the
-   replica entirely), and five-figure totals. Pass-through means an unknown row
-   now survives rather than vanishing, so the risk is layout, not loss.
-5. **Multi-voucher spacing is still unverified on paper.** Two and three
-   vouchers render, but only single-voucher output has been compared against
-   anything real.
+   replica entirely), and five-figure totals.
 
 Smaller, noted but not acted on:
 
 - No visual separator between the receipt and the voucher — they flow straight
   into each other.
-- The voucher's expiry line hardcodes "24 HOURS" while the real validity comes
-  from `VOUCHER_VALID_HOURS` on the service side. They agree today; change the
-  validity and the slip quietly lies.
-- `VoucherRenderer.render` takes access hours but not validity hours, which is
-  why the above is hardcoded. Fixing it changes the signature and its call site.
+- Reprinting a long-expired receipt mints fresh vouchers, since a cleaned-up
+  group reads as spent. Left deliberately: Irene does not reprint old receipts,
+  and refusing would also refuse a genuine next-morning reprint.
+- The keepalive and the reconnect both cost a request; neither has been seen
+  firing in anger, because the session has not yet lapsed.

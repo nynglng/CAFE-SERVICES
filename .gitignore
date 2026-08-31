@@ -12,3 +12,7 @@ android/**/debug.keystore
 # sales, kept out of git entirely.
 *.bin
 captures/
+
+# One exception: a reference print of a made-up sale - no customer on it -
+# kept so the renderer can be checked on any machine without the phone.
+!captures/graphic-58mm-reference.bin

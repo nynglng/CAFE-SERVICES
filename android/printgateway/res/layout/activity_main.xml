@@ -71,7 +71,7 @@
         android:layout_height="wrap_content"
         android:paddingTop="8dp"
         android:textStyle="bold"
-        android:text="Print jobs (newest first)" />
+        android:text="Last print" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -94,14 +94,12 @@
             android:visibility="gone" />
 
         <TextView
-            android:id="@+id/jobsView"
+            android:id="@+id/emptyView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:typeface="monospace"
-            android:textSize="12sp"
             android:paddingTop="6dp"
-            android:textIsSelectable="true"
-            android:text="Waiting for a print job..." />
+            android:textSize="13sp"
+            android:text="Nothing printed yet." />
       </LinearLayout>
     </ScrollView>
 </LinearLayout>

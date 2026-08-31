@@ -27,9 +27,6 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
-    /** The client's 58mm paper is 32 characters, which Loyverse formats to. */
-    private static final int PAPER_WIDTH = ReceiptParser.COLUMNS;
-
     private static final int MENU_SETTINGS = 1;
 
     private static final int OMADA_LOGIN = 1;
@@ -37,7 +34,7 @@ public class MainActivity extends Activity {
     private TextView statusLine;
     private TextView addressLine;
     private TextView omadaLine;
-    private TextView jobsView;
+    private TextView emptyView;
     private ImageView receiptImage;
     private Button toggleButton;
 
@@ -61,7 +58,7 @@ public class MainActivity extends Activity {
         statusLine = (TextView) findViewById(R.id.statusLine);
         addressLine = (TextView) findViewById(R.id.addressLine);
         omadaLine = (TextView) findViewById(R.id.omadaLine);
-        jobsView = (TextView) findViewById(R.id.jobsView);
+        emptyView = (TextView) findViewById(R.id.emptyView);
         receiptImage = (ImageView) findViewById(R.id.receiptImage);
         toggleButton = (Button) findViewById(R.id.toggleButton);
 
@@ -73,7 +70,7 @@ public class MainActivity extends Activity {
                 } else {
                     startGateway();
                 }
-                jobsView.postDelayed(new Runnable() {
+                emptyView.postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         render();
@@ -141,7 +138,6 @@ public class MainActivity extends Activity {
                         String site = Settings.siteName();
                         omadaLine.setText(connected
                                 ? "Omada: " + (site.length() > 0 ? site : "connected")
-                                        + " - vouchers are real"
                                 : "Omada: not connected - tap Omada to sign in");
                         for (PrintJob job : PrintServerService.jobs()) {
                             job.forgetReplica();
@@ -239,110 +235,7 @@ public class MainActivity extends Activity {
             receiptImage.setVisibility(View.GONE);
         }
 
-        if (jobs.isEmpty()) {
-            jobsView.setText("No print jobs yet.\n\nSend a test print from Loyverse "
-                    + "and the receipt will appear here.");
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        synchronized (jobs) {
-            for (PrintJob job : jobs) {
-                sb.append(divider());
-                sb.append(job.time()).append("   ")
-                        .append(job.decoded.byteCount).append(" bytes   -> ")
-                        .append(job.role().label).append(" printer (")
-                        .append(job.dialled).append(")\n");
-                sb.append(divider());
-                sb.append(summarise(job));
-                sb.append(composed(job));
-                if (!job.decoded.events.isEmpty()) {
-                    sb.append('\n');
-                    for (String event : job.decoded.events) {
-                        sb.append("  [").append(event).append("]\n");
-                    }
-                }
-                sb.append('\n');
-            }
-        }
-        jobsView.setText(sb.toString());
-    }
-
-    /**
-     * What the gateway understood, and what it would print.
-     *
-     * The receipt is graphic because it is forwarded untouched and never needs
-     * reading; the voucher ticket is text because it is the one parsed to work
-     * out how many codes to issue.
-     */
-    private static String summarise(PrintJob job) {
-        if (job.hasImage()) {
-            if (job.role() == PrinterRole.VOUCHER) {
-                return "CANNOT READ THIS: the voucher printer is in graphic mode.\n"
-                        + "Set its print mode to Text so the items can be read.\n\n";
-            }
-            return "Receipt image - forwarded to the printer as-is.\n\n";
-        }
-
-        ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
-        if (receipt.items.isEmpty()) {
-            return "";
-        }
-        SalePlan plan = SalePlan.from(receipt);
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("UNDERSTOOD AS:\n");
-        if (receipt.receiptNumber.length() > 0) {
-            sb.append("  receipt ").append(receipt.receiptNumber).append('\n');
-        }
-        for (ReceiptParser.Item item : receipt.items) {
-            sb.append("  ").append(item.wholeQuantity()).append(" x ")
-                    .append(item.name);
-            if (SalePlan.isWifi(item.name)) {
-                sb.append("   <- WiFi");
-            }
-            sb.append('\n');
-        }
-        sb.append("WILL PRINT: ").append(plan.describe()).append("\n\n");
-        return sb.toString();
-    }
-
-    private static ReceiptParser.Item findWifi(ReceiptParser.Receipt receipt) {
-        ReceiptParser.Item wifi = receipt.findItem("wi-fi");
-        return wifi != null ? wifi : receipt.findItem("wifi");
-    }
-    /**
-     * The full output for a job: what the paper would actually say.
-     *
-     * Driven entirely by what was sold, not by which printer was dialled, so a
-     * single gateway printer works as well as a split pair.
-     */
-    private static String composed(PrintJob job) {
-        if (job.hasImage()) {
-            return job.preview(PAPER_WIDTH);
-        }
-        ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
-        if (receipt.items.isEmpty()) {
-            return job.preview(PAPER_WIDTH);
-        }
-
-        SalePlan plan = SalePlan.from(receipt);
-        StringBuilder sb = new StringBuilder();
-
-        if (plan.printReceipt) {
-            for (String row : plan.receiptRows) {
-                sb.append(row).append('\n');
-            }
-        }
-        if (plan.printVoucher) {
-            // The slip itself is drawn by VoucherRenderer and shown above as
-            // part of the picture; only the count is worth restating here.
-            sb.append("\n  + ").append(plan.voucherCount)
-                    .append(" voucher(s) drawn below the receipt\n")
-                    .append("  (codes are placeholders until Omada is wired)\n");
-        }
-
-        return sb.toString();
+        emptyView.setVisibility(newest == null ? View.VISIBLE : View.GONE);
     }
 
     /** The store name row, which sits centred above everything else. */
@@ -359,14 +252,6 @@ public class MainActivity extends Activity {
         }
         return "";
     }
-    private static String divider() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < PAPER_WIDTH; i++) {
-            sb.append('-');
-        }
-        return sb.append('\n').toString();
-    }
-
     /**
      * Every address this device can be reached on, so the right one can be
      * typed into Loyverse. Loopback is included because the POS is on this

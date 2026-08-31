@@ -36,7 +36,6 @@ public final class BluetoothPrinter {
     private static final long CHUNK_PAUSE_MS = 30;
 
     /** Time for the last chunk to reach paper before the socket closes. */
-    private static final long DRAIN_MS = 600;
 
     private BluetoothPrinter() {
     }
@@ -90,6 +89,20 @@ public final class BluetoothPrinter {
      *
      * @return null on success, or a short reason to show and log
      */
+    /** The open link to the printer, kept between prints. */
+    private static BluetoothSocket socket;
+    private static String connectedTo = "";
+    private static final Object LOCK = new Object();
+
+    /**
+     * Send one job to the printer.
+     *
+     * The link is opened once and kept. An RFCOMM connect to a paired printer
+     * costs the best part of a second or two, and paying that on every receipt
+     * was a large part of the wait at the counter. A dropped link is not
+     * unusual - printers sleep, someone walks out of range - so a failed write
+     * closes the socket and tries once more with a fresh one.
+     */
     public static String send(Context context, byte[] payload) {
         String address = Settings.printerAddress();
         if (address.length() == 0) {
@@ -103,32 +116,68 @@ public final class BluetoothPrinter {
             return "Bluetooth is off";
         }
 
-        BluetoothSocket socket = null;
-        try {
-            BluetoothDevice device = adapter.getRemoteDevice(address);
-            socket = device.createRfcommSocketToServiceRecord(SPP);
-            // Discovery cripples a connection attempt, and may be running if
-            // someone just used the picker.
-            adapter.cancelDiscovery();
-            socket.connect();
+        synchronized (LOCK) {
+            String lastProblem = null;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                try {
+                    long t0 = System.currentTimeMillis();
+                    boolean reused = isUsable(address);
+                    BluetoothSocket live = connect(adapter, address);
+                    long connected = System.currentTimeMillis();
 
-            OutputStream out = socket.getOutputStream();
-            for (int offset = 0; offset < payload.length; offset += CHUNK) {
-                int length = Math.min(CHUNK, payload.length - offset);
-                out.write(payload, offset, length);
-                out.flush();
-                sleep(CHUNK_PAUSE_MS);
+                    OutputStream out = live.getOutputStream();
+                    for (int offset = 0; offset < payload.length; offset += CHUNK) {
+                        int length = Math.min(CHUNK, payload.length - offset);
+                        out.write(payload, offset, length);
+                        out.flush();
+                        sleep(CHUNK_PAUSE_MS);
+                    }
+                    Log.i(PrintServerService.TAG, "printed " + payload.length
+                            + " bytes to " + Settings.printerName()
+                            + " (link " + (reused ? "reused" : "opened in "
+                                    + (connected - t0) + "ms")
+                            + ", sent in " + (System.currentTimeMillis() - connected) + "ms)");
+                    return null;
+                } catch (SecurityException e) {
+                    return "no permission to use Bluetooth";
+                } catch (Exception e) {
+                    // Either the kept link had gone stale or the printer is
+                    // genuinely unreachable; the retry tells them apart.
+                    lastProblem = String.valueOf(e.getMessage());
+                    Log.i(PrintServerService.TAG, "print attempt " + (attempt + 1)
+                            + " failed: " + lastProblem);
+                    drop();
+                }
             }
-            sleep(DRAIN_MS);
-            Log.i(PrintServerService.TAG, "printed " + payload.length + " bytes to "
-                    + Settings.printerName());
-            return null;
-        } catch (SecurityException e) {
-            return "no permission to use Bluetooth";
-        } catch (Exception e) {
-            Log.e(PrintServerService.TAG, "printing failed: " + e);
-            return String.valueOf(e.getMessage());
-        } finally {
+            return lastProblem;
+        }
+    }
+
+    private static boolean isUsable(String address) {
+        return socket != null && socket.isConnected() && address.equals(connectedTo);
+    }
+
+    /** The open socket, dialling only if there is not already a good one. */
+    private static BluetoothSocket connect(BluetoothAdapter adapter, String address)
+            throws Exception {
+        if (isUsable(address)) {
+            return socket;
+        }
+        drop();
+        BluetoothDevice device = adapter.getRemoteDevice(address);
+        BluetoothSocket fresh = device.createRfcommSocketToServiceRecord(SPP);
+        // Discovery cripples a connection attempt, and may be running if
+        // someone just used the picker.
+        adapter.cancelDiscovery();
+        fresh.connect();
+        socket = fresh;
+        connectedTo = address;
+        return fresh;
+    }
+
+    /** Let go of the link, so the next print dials a fresh one. */
+    public static void drop() {
+        synchronized (LOCK) {
             if (socket != null) {
                 try {
                     socket.close();
@@ -136,6 +185,8 @@ public final class BluetoothPrinter {
                     // closing a broken socket is not interesting
                 }
             }
+            socket = null;
+            connectedTo = "";
         }
     }
 

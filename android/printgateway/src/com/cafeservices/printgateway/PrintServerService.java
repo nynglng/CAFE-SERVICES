@@ -148,8 +148,20 @@ public class PrintServerService extends Service {
             Log.i(TAG, "listening on " + PORT);
 
             while (running && !serverSocket.isClosed()) {
-                Socket client = serverSocket.accept();
-                handleClient(client);
+                final Socket client = serverSocket.accept();
+                // Handle it off the accept thread. Issuing a voucher and
+                // pushing a receipt over Bluetooth take a second or two, and
+                // while that ran here the gateway was not accepting anything -
+                // so a reprint, or the next sale, sat in the backlog waiting
+                // for a print it had nothing to do with.
+                Thread worker = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        handleClient(client);
+                    }
+                }, "print-job");
+                worker.setDaemon(true);
+                worker.start();
             }
         } catch (Exception e) {
             Log.e(TAG, "server stopped: " + e);
@@ -193,6 +205,7 @@ public class PrintServerService extends Service {
         // and told apart here, with no network involved at all.
         String dialled = client.getLocalAddress() != null
                 ? client.getLocalAddress().getHostAddress() : "unknown";
+        long acceptedAt = System.currentTimeMillis();
         try {
             client.setSoTimeout(IDLE_END_MS);
             InputStream in = client.getInputStream();
@@ -239,6 +252,10 @@ public class PrintServerService extends Service {
                 // how you get a parser that works on one receipt and no others,
                 // so real captures are worth more than any amount of inference.
                 saveRaw(bytes);
+                // Tell the screen straight away. The work below takes a second
+                // or two, and a job that only appears once it has finished
+                // printing looks like a gateway that was slow to accept it.
+                sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
                 // Codes first: they have to be on the paper this sale prints,
                 // and there is no second print to add them to.
                 long t0 = System.currentTimeMillis();
@@ -251,7 +268,8 @@ public class PrintServerService extends Service {
                 // Where the cashier's wait actually goes. Read this after a
                 // real sale before optimising anything - the parts are not the
                 // sizes you would guess.
-                Log.i(TAG, "timing: read " + (readDoneAt - firstByteAt)
+                Log.i(TAG, "timing: connect->data " + (firstByteAt - acceptedAt)
+                        + "ms, read " + (readDoneAt - firstByteAt)
                         + "ms, vouchers " + (t1 - t0)
                         + "ms, render " + (t2 - t1)
                         + "ms, print " + (t3 - t2)

@@ -107,6 +107,17 @@ public final class OmadaSession {
      * here and only `result` is handed back - callers should never have to
      * think about it.
      */
+    /**
+     * One call to the portal API.
+     *
+     * Deliberately does NOT disconnect on success. HttpURLConnection pools
+     * sockets, and disconnect() throws that away - so every call paid a fresh
+     * TCP connect and TLS handshake to a server in Singapore. Issuing one
+     * voucher is two calls (create the group, then read its codes back), and
+     * on cafe wifi those handshakes were most of the second and a half the
+     * cashier spent waiting for paper. Reading the body to EOF and closing the
+     * stream, which read() does, is what returns the socket to the pool.
+     */
     public static JSONObject request(String method, String path, JSONObject body)
             throws Exception {
         URL url = new URL(API_BASE + "/" + Settings.accountId() + path);
@@ -158,8 +169,11 @@ public final class OmadaSession {
                         + " (errorCode " + errorCode + ")", errorCode);
             }
             return envelope.optJSONObject("result");
-        } finally {
+        } catch (Exception e) {
+            // A connection that failed mid-exchange is not safe to hand back
+            // to the pool; drop it and let the next call dial afresh.
             conn.disconnect();
+            throw e;
         }
     }
 

@@ -47,13 +47,22 @@ public class PrintServerService extends Service {
     private static volatile boolean running = false;
 
     /**
-     * How often to check the Omada session while nothing is being sold.
+     * How often to touch Omada while nothing is being sold.
      *
-     * The gateway is meant to run a whole shift unattended, so a lapsed session
-     * should be found and fixed between sales rather than discovered by a
-     * customer standing at the counter.
+     * Two jobs, which is why it is far more often than a session check needs.
+     * The gateway runs a whole shift unattended, so a lapsed session should be
+     * found between sales rather than by a customer at the counter - a quarter
+     * of an hour was plenty for that.
+     *
+     * It also keeps the HTTPS connection pooled. Idle sockets are dropped
+     * within about a minute, and issuing a voucher is two calls to a server in
+     * Singapore: if the first has to dial and shake hands, the customer waits
+     * for it. Touching the portal every 45 seconds means a sale almost always
+     * finds the connection already open. The cost is one small request a
+     * minute; sales are minutes apart, so it buys back most of a second on
+     * every voucher printed.
      */
-    private static final long KEEPALIVE_MS = 15 * 60 * 1000L;
+    private static final long KEEPALIVE_MS = 45 * 1000L;
 
     private ServerSocket serverSocket;
     private Thread acceptThread;

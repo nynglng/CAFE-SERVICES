@@ -48,6 +48,20 @@ public final class VoucherIssuer {
             return;
         }
 
+        // A split bill prints once per payment, each carrying the whole item
+        // list, so the second half must be given the first half's codes rather
+        // than buying another set.
+        String sale = SplitSales.fingerprint(receipt);
+        if (sale != null) {
+            List<String> already = SplitSales.codesFor(sale);
+            if (already != null) {
+                job.setIssuedCodes(already);
+                Log.i(PrintServerService.TAG, "same sale as the last print - "
+                        + "reusing " + already.size() + " voucher(s)");
+                return;
+            }
+        }
+
         if (!issue(job, plan)) {
             // A lapsed controller session is the ordinary reason, and it is
             // fixed by loading the portal again rather than by a person. One
@@ -56,6 +70,10 @@ public final class VoucherIssuer {
             if (!OmadaReconnector.revive(context) || !issue(job, plan)) {
                 return;
             }
+        }
+
+        if (sale != null && job.hasIssuedCodes()) {
+            SplitSales.remember(sale, job.issuedCodes());
         }
 
         try {

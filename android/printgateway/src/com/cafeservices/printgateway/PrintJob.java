@@ -78,6 +78,11 @@ public final class PrintJob {
         forgetReplica();
     }
 
+    /** The codes on this sale, empty when none were issued. */
+    public List<String> issuedCodes() {
+        return issuedCodes == null ? new ArrayList<String>() : issuedCodes;
+    }
+
     /** False when Omada could not be reached and the slip shows stand-ins. */
     public boolean hasIssuedCodes() {
         return issuedCodes != null && !issuedCodes.isEmpty();

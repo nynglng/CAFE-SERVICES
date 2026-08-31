@@ -93,6 +93,56 @@ public final class OmadaClient {
     }
 
     /**
+     * Codes for a sale, naming the group after the receipt so the sale can be
+     * recognised again.
+     *
+     * A reprint of the same receipt - or the second half of a split bill, or
+     * this app being reinstalled between them - finds the group already
+     * standing and hands back the codes it holds, rather than buying more.
+     * Omada is the memory here, which is why this survives a restart when a
+     * table in the app's head would not.
+     *
+     * @param saleId       the receipt number, e.g. 1-0007
+     * @param quantity     how many codes the sale asked for
+     * @param accessHours  access time, counted from a guest's first login
+     * @param expiryHours  how long an unredeemed code stays redeemable
+     */
+    public static List<String> issueFor(String saleId, int quantity, int accessHours,
+                                        int expiryHours) throws Exception {
+        String prefix = POS_PREFIX + saleId + "-";
+        Group existing = findGroup(prefix);
+        if (existing != null) {
+            List<String> codes = codesOf(existing.id);
+            if (!codes.isEmpty()) {
+                Log.i(PrintServerService.TAG, "sale " + saleId + " already bought "
+                        + codes.size() + " voucher(s) - reusing " + existing.name);
+                return codes;
+            }
+            // A group with no codes left in it is spent, and reusing nothing
+            // would print a slip with no codes on it. Fall through and buy.
+        }
+        return issue(prefix + stamp(), quantity, accessHours, expiryHours);
+    }
+
+    /** Our group for a sale, or null if this sale has not been seen. */
+    private static Group findGroup(String namePrefix) throws Exception {
+        for (Group group : listGroups()) {
+            if (ownedByService(group) && group.name.startsWith(namePrefix)) {
+                return group;
+            }
+        }
+        return null;
+    }
+
+    private static List<String> codesOf(String groupId) throws Exception {
+        List<String> codes = new ArrayList<String>();
+        for (Voucher v : listCodes(groupId)) {
+            codes.add(v.code);
+        }
+        return codes;
+    }
+
+    /**
      * Create a group for a sale and hand back its codes.
      *
      * @param quantity     how many codes the sale asked for
@@ -101,13 +151,14 @@ public final class OmadaClient {
      */
     public static List<String> issue(int quantity, int accessHours, int expiryHours)
             throws Exception {
-        String name = POS_PREFIX + stamp();
+        return issue(POS_PREFIX + stamp(), quantity, accessHours, expiryHours);
+    }
+
+    private static List<String> issue(String name, int quantity, int accessHours,
+                                      int expiryHours) throws Exception {
         String groupId = createGroup(name, quantity, accessHours * 60, expiryHours);
 
-        List<String> codes = new ArrayList<String>();
-        for (Voucher v : listCodes(groupId)) {
-            codes.add(v.code);
-        }
+        List<String> codes = codesOf(groupId);
         if (codes.isEmpty()) {
             throw new IllegalStateException("Omada created " + name + " but returned no codes");
         }

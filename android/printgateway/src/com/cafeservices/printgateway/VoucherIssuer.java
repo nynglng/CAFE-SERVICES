@@ -25,12 +25,15 @@ public final class VoucherIssuer {
     }
 
     /** One attempt at the codes. False means Omada would not answer. */
-    private static boolean issue(PrintJob job, SalePlan plan) {
+    private static boolean issue(PrintJob job, SalePlan plan, String saleId) {
         try {
-            List<String> codes = OmadaClient.issue(plan.voucherCount,
-                    Settings.accessHours(), Settings.expiryHours());
+            List<String> codes = saleId.length() > 0
+                    ? OmadaClient.issueFor(saleId, plan.voucherCount,
+                            Settings.accessHours(), Settings.expiryHours())
+                    : OmadaClient.issue(plan.voucherCount,
+                            Settings.accessHours(), Settings.expiryHours());
             job.setIssuedCodes(codes);
-            Log.i(PrintServerService.TAG, "issued " + codes.size() + " voucher(s)");
+            Log.i(PrintServerService.TAG, codes.size() + " voucher code(s) ready");
             return true;
         } catch (Exception e) {
             Log.e(PrintServerService.TAG, "could not issue vouchers: " + e);
@@ -48,10 +51,13 @@ public final class VoucherIssuer {
             return;
         }
 
-        // A split bill prints once per payment, each carrying the whole item
-        // list, so the second half must be given the first half's codes rather
-        // than buying another set.
-        String sale = SplitSales.fingerprint(receipt);
+        // The receipt number is the sale's own name for itself, and Omada
+        // remembers it in the group name - so a reprint, however much later,
+        // gets the codes that sale already bought. Split halves are the one
+        // case Loyverse leaves it off, and they fall back to matching on what
+        // was sold.
+        String saleId = receipt.receiptNumber.replace("#", "");
+        String sale = saleId.length() > 0 ? null : SplitSales.fingerprint(receipt);
         if (sale != null) {
             List<String> already = SplitSales.codesFor(sale);
             if (already != null) {
@@ -62,12 +68,12 @@ public final class VoucherIssuer {
             }
         }
 
-        if (!issue(job, plan)) {
+        if (!issue(job, plan, saleId)) {
             // A lapsed controller session is the ordinary reason, and it is
             // fixed by loading the portal again rather than by a person. One
             // retry: if the account login itself has gone, no amount of
             // reloading will help and the queue should not be kept waiting.
-            if (!OmadaReconnector.revive(context) || !issue(job, plan)) {
+            if (!OmadaReconnector.revive(context) || !issue(job, plan, saleId)) {
                 return;
             }
         }

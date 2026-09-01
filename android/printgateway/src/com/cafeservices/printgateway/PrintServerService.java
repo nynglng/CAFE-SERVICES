@@ -7,8 +7,14 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.PixelFormat;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowManager;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
@@ -38,7 +44,16 @@ public class PrintServerService extends Service {
     public static final int PORT = 9100;
 
     public static final String ACTION_JOB_RECEIVED = "com.cafeservices.printgateway.JOB";
-    private static final String CHANNEL_ID = "print_gateway";
+    /**
+     * The channel the ongoing notification lives on.
+     *
+     * A new id rather than the old "print_gateway", because a channel's
+     * importance belongs to the user once it exists: an app may create it, not
+     * quieten it afterwards. The only way to move an existing install down to
+     * IMPORTANCE_MIN is to ask on a channel that has never been seen before.
+     */
+    private static final String CHANNEL_ID = "receipt_printer";
+    private static final String OLD_CHANNEL_ID = "print_gateway";
 
     /** Jobs are kept in memory only; nothing is written to storage yet. */
     private static final List<PrintJob> JOBS =
@@ -68,6 +83,52 @@ public class PrintServerService extends Service {
     private Thread acceptThread;
     private Thread keepaliveThread;
 
+    /**
+     * What keeps the tablet reachable while nobody is touching it.
+     *
+     * A foreground service keeps the process alive; it does not keep the radio
+     * awake. With the screen off, wifi drops into power save and the tablet
+     * stops answering an incoming connection promptly - or at all - so
+     * Loyverse's print goes nowhere and the counter learns it only when no
+     * paper comes out. Waking the app is what fixed it, which is why the
+     * gateway had to be opened by hand.
+     *
+     * The wifi lock is the one that matters: it keeps the interface out of
+     * power save so a connection to port 9100 is answered. The wake lock stops
+     * the CPU sleeping through the middle of a job - a print is a couple of
+     * seconds of work and a doze in the gap would strand it half printed.
+     *
+     * Both are held only while the gateway is listening, and both are released
+     * in onDestroy. The cost is battery, which is the right trade for a tablet
+     * that is plugged in at a counter.
+     */
+    private WifiManager.WifiLock wifiLock;
+    private PowerManager.WakeLock wakeLock;
+
+    /**
+     * One transparent pixel on the screen, and the reason the gateway stays
+     * awake at all.
+     *
+     * A foreground service is a request, not a guarantee. Phone makers layer
+     * their own battery saving over Android and freeze background processes
+     * regardless - we watched this one go into freezer:/frozen while the phone
+     * was awake, notifications were on and it sat on Android's own battery
+     * whitelist. Frozen, it cannot answer Loyverse: the connection lands in
+     * the kernel's accept queue, the receipt sits unread in the socket buffer,
+     * and nothing prints until a person touches the phone.
+     *
+     * What none of those killers will touch is an app with a window on screen,
+     * because that is indistinguishable from an app the user is looking at. So
+     * the gateway keeps one: a single transparent pixel in the corner, not
+     * focusable, not touchable, drawing nothing anyone can see. To Android the
+     * process is visible and stays out of the freezer; to the counter there is
+     * nothing there.
+     *
+     * It costs the "Display over other apps" permission, which is one toggle
+     * and shows no UI of its own.
+     */
+    private View presence;
+
     public static List<PrintJob> jobs() {
         return JOBS;
     }
@@ -93,8 +154,13 @@ public class PrintServerService extends Service {
         if (running) {
             return START_STICKY;
         }
-        startForeground(1, buildNotification("Listening on port " + PORT));
+        startForeground(1, buildNotification("Connected"));
         running = true;
+        holdRadios();
+        showPresence();
+        // Arm the safety net every time the gateway starts, so it is armed
+        // again after a reboot, a reinstall, or a force stop.
+        Watchdog.schedule(this);
 
         acceptThread = new Thread(new Runnable() {
             @Override
@@ -113,6 +179,108 @@ public class PrintServerService extends Service {
         keepaliveThread.start();
 
         return START_STICKY;
+    }
+
+    /** Keep wifi and the CPU awake enough to answer a print. */
+    private void holdRadios() {
+        try {
+            WifiManager wifi = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null && wifiLock == null) {
+                // HIGH_PERF rather than FULL: FULL still allows power save on
+                // many devices, and power save is the whole problem here.
+                wifiLock = wifi.createWifiLock(
+                        WifiManager.WIFI_MODE_FULL_HIGH_PERF, "printgateway:wifi");
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();
+            }
+            PowerManager power =
+                    (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (power != null && wakeLock == null) {
+                wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                        "printgateway:cpu");
+                wakeLock.setReferenceCounted(false);
+                wakeLock.acquire();
+            }
+            Log.i(TAG, "holding wifi and cpu awake while listening");
+        } catch (Exception e) {
+            // A tablet that refuses the locks still prints while it is awake;
+            // losing them is not a reason to refuse to start.
+            Log.e(TAG, "could not hold the radios awake: " + e);
+        }
+    }
+
+    /** Put the pixel on screen, if we are allowed windows at all. */
+    private void showPresence() {
+        if (presence != null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !android.provider.Settings.canDrawOverlays(this)) {
+            Log.i(TAG, "no permission to show over other apps - the gateway "
+                    + "will be frozen when it is not on screen");
+            return;
+        }
+        try {
+            WindowManager windows =
+                    (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            if (windows == null) {
+                return;
+            }
+            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    : WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
+            WindowManager.LayoutParams where = new WindowManager.LayoutParams(
+                    1, 1, type,
+                    // Never take focus or touches: the cashier must not be
+                    // able to hit this by accident, and Loyverse must keep
+                    // every key press and tap it would otherwise get.
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT);
+            where.gravity = Gravity.TOP | Gravity.START;
+            where.x = 0;
+            where.y = 0;
+            View pixel = new View(this);
+            pixel.setBackgroundColor(0x00000000);
+            windows.addView(pixel, where);
+            presence = pixel;
+            Log.i(TAG, "holding a window on screen so the gateway stays visible");
+        } catch (Exception e) {
+            Log.e(TAG, "could not hold a window: " + e);
+        }
+    }
+
+    private void hidePresence() {
+        if (presence == null) {
+            return;
+        }
+        try {
+            WindowManager windows =
+                    (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            if (windows != null) {
+                windows.removeView(presence);
+            }
+        } catch (Exception ignored) {
+            // shutting down anyway
+        }
+        presence = null;
+    }
+
+    private void releaseRadios() {
+        try {
+            if (wifiLock != null && wifiLock.isHeld()) {
+                wifiLock.release();
+            }
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
+        } catch (Exception ignored) {
+            // shutting down anyway
+        }
+        wifiLock = null;
+        wakeLock = null;
     }
 
     /**
@@ -206,6 +374,7 @@ public class PrintServerService extends Service {
         String dialled = client.getLocalAddress() != null
                 ? client.getLocalAddress().getHostAddress() : "unknown";
         long acceptedAt = System.currentTimeMillis();
+        long rawMs = 0;
         try {
             client.setSoTimeout(IDLE_END_MS);
             InputStream in = client.getInputStream();
@@ -251,7 +420,13 @@ public class PrintServerService extends Service {
                 // Keep the raw stream. Guessing at another vendor's format is
                 // how you get a parser that works on one receipt and no others,
                 // so real captures are worth more than any amount of inference.
-                saveRaw(bytes);
+                long rawSavedAt;
+                {
+                    long before = System.currentTimeMillis();
+                    saveRaw(bytes);
+                    rawSavedAt = System.currentTimeMillis();
+                    rawMs = rawSavedAt - before;
+                }
                 // Tell the screen straight away. The work below takes a second
                 // or two, and a job that only appears once it has finished
                 // printing looks like a gateway that was slow to accept it.
@@ -260,22 +435,46 @@ public class PrintServerService extends Service {
                 // and there is no second print to add them to.
                 long t0 = System.currentTimeMillis();
                 VoucherIssuer.fill(job, this);
+                // Drawing is separated from saving the debug PNG, and encoding
+                // from sending, because three of those four are ours to make
+                // faster and the fourth is the printer's own speed.
                 long t1 = System.currentTimeMillis();
-                saveReplica(job);
+                job.replica();
                 long t2 = System.currentTimeMillis();
-                sendToPrinter(job);
+                saveReplica(job);
                 long t3 = System.currentTimeMillis();
+                byte[] payload = payloadFor(job);
+                long t4 = System.currentTimeMillis();
+                saveBytes(payload, "-print.bin");
+                long t5 = System.currentTimeMillis();
+                deliver(payload);
+                long t6 = System.currentTimeMillis();
+                // The paper is out and the customer has gone. Everything from
+                // here is for us.
+                VoucherIssuer.tidy(job);
                 // Where the cashier's wait actually goes. Read this after a
                 // real sale before optimising anything - the parts are not the
                 // sizes you would guess.
-                Log.i(TAG, "timing: connect->data " + (firstByteAt - acceptedAt)
+                // One line per sale, every phase separated. Read it after a
+                // real sale before optimising anything - the parts have never
+                // once been the sizes they looked.
+                // Composed after the tidying so its cost is in the line, but
+                // reported apart from "counter", which stops at the paper.
+                Log.i(TAG, "timing:"
+                        + " wait " + (firstByteAt - acceptedAt)
                         + "ms, read " + (readDoneAt - firstByteAt)
-                        + "ms, vouchers " + (t1 - t0)
-                        + "ms, render " + (t2 - t1)
-                        + "ms, print " + (t3 - t2)
-                        + "ms, total " + (t3 - firstByteAt) + "ms");
+                        + "ms, rawsave " + rawMs
+                        + "ms, issue " + job.issueMs
+                        + "ms, tidy " + job.tidyMs
+                        + "ms, draw " + (t2 - t1)
+                        + "ms, png " + (t3 - t2)
+                        + "ms, encode " + (t4 - t3)
+                        + "ms, binsave " + (t5 - t4)
+                        + "ms, send " + (t6 - t5)
+                        + "ms, counter " + (t6 - firstByteAt)
+                        + "ms, total " + (System.currentTimeMillis() - acceptedAt) + "ms");
                 sendBroadcast(new Intent(ACTION_JOB_RECEIVED).setPackage(getPackageName()));
-                updateNotification(JOBS.size() + " job(s) received");
+                updateNotification(JOBS.size() + " receipt(s) printed");
             }
         } catch (Exception e) {
             Log.e(TAG, "client error: " + e);
@@ -289,7 +488,7 @@ public class PrintServerService extends Service {
     }
 
     /**
-     * Hand the finished print to the cafe's printer.
+     * The bytes to send for this job.
      *
      * What goes out is the redrawn receipt re-encoded the way Loyverse encodes
      * its own graphic prints. A job we could not redraw - an image, or
@@ -300,20 +499,17 @@ public class PrintServerService extends Service {
      * print with one, and a till that stopped opening because the gateway was
      * put in front of it would be a strange thing to have to debug.
      */
-    private void sendToPrinter(PrintJob job) {
-        byte[] payload;
+    private byte[] payloadFor(PrintJob job) {
         android.graphics.Bitmap replica = job.replica();
-        if (replica != null) {
-            payload = EscPosEncoder.encode(replica,
-                    job.decoded.events.contains("cash drawer pulse"));
-        } else {
-            payload = job.raw;
+        if (replica == null) {
+            return job.raw;
         }
-        // Kept beside the capture: with no printer chosen this is the only
-        // way to see what would have gone down the wire, and with one it is
-        // still the record of what did.
-        saveBytes(payload, "-print.bin");
+        return EscPosEncoder.encode(replica,
+                job.decoded.events.contains("cash drawer pulse"));
+    }
 
+    /** Put it on the wire. Silent when no printer is chosen. */
+    private void deliver(byte[] payload) {
         if (Settings.printerAddress().length() == 0) {
             return;
         }
@@ -395,9 +591,33 @@ public class PrintServerService extends Service {
     private Notification buildNotification(String text) {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // A foreground service must carry a notification - that is the
+            // deal Android makes, and it is the notification that tells the
+            // phone this app is doing real work rather than idling in the
+            // background. Switching notifications off for the app therefore
+            // gets it frozen, and a frozen gateway silently ignores prints.
+            //
+            // The quietest channel Android will accept keeps the deal while
+            // showing the counter as little as possible: no sound, no pop-up,
+            // no badge. The system clamps a foreground service's channel up to
+            // LOW whatever we ask for, so a small status bar icon stays; the
+            // wording is what is left to work with, and it says what this is -
+            // a printer that is connected - rather than a developer tool.
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID, "Print Gateway", NotificationManager.IMPORTANCE_LOW);
+                    CHANNEL_ID, "Receipt printer", NotificationManager.IMPORTANCE_MIN);
+            channel.setDescription("Shows that receipt printing is working.");
+            channel.setShowBadge(false);
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+            channel.enableLights(false);
             nm.createNotificationChannel(channel);
+            // Leave nothing behind in the notification settings screen that
+            // the owner could switch off by mistake.
+            try {
+                nm.deleteNotificationChannel(OLD_CHANNEL_ID);
+            } catch (Exception ignored) {
+                // it may never have existed on this install
+            }
         }
 
         Intent open = new Intent(this, MainActivity.class);
@@ -410,12 +630,17 @@ public class PrintServerService extends Service {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
 
-        return b.setContentTitle("Print Gateway")
+        b.setContentTitle("Receipt printer")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
                 .setContentIntent(pi)
                 .setOngoing(true)
-                .build();
+                .setShowWhen(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // Bottom of the shade, under the silent heading.
+            b.setPriority(Notification.PRIORITY_MIN);
+        }
+        return b.build();
     }
 
     private void updateNotification(String text) {
@@ -426,6 +651,8 @@ public class PrintServerService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        hidePresence();
+        releaseRadios();
         try {
             if (serverSocket != null) {
                 serverSocket.close();

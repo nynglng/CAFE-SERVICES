@@ -18,6 +18,17 @@ public final class PrintJob {
     public final byte[] raw;
     public final EscPosDecoder.Result decoded;
 
+    /**
+     * Where this sale's wait went, in milliseconds, filled in as it happens.
+     *
+     * Kept on the job rather than in the log line because the two halves are
+     * measured in a different class from the one that reports them, and a
+     * single merged number was exactly what stopped us telling the customer's
+     * wait apart from the housekeeping behind it.
+     */
+    public long issueMs;
+    public long tidyMs;
+
     private Bitmap rendered;
     private boolean renderAttempted;
     private Bitmap replicaBitmap;

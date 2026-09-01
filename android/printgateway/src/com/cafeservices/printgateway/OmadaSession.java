@@ -120,6 +120,10 @@ public final class OmadaSession {
      */
     public static JSONObject request(String method, String path, JSONObject body)
             throws Exception {
+        // Every call is timed, because the number that matters here is one
+        // round trip to Singapore and it cannot be reasoned about from the
+        // gateway - it depends entirely on the cafe's line that day.
+        long startedAt = System.currentTimeMillis();
         URL url = new URL(API_BASE + "/" + Settings.accountId() + path);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         try {
@@ -168,6 +172,9 @@ public final class OmadaSession {
                         + envelope.optString("msg", "unknown error")
                         + " (errorCode " + errorCode + ")", errorCode);
             }
+            Log.i(PrintServerService.TAG, "omada " + method + " "
+                    + path.substring(path.lastIndexOf('/') + 1)
+                    + " " + (System.currentTimeMillis() - startedAt) + "ms");
             return envelope.optJSONObject("result");
         } catch (Exception e) {
             // A connection that failed mid-exchange is not safe to hand back

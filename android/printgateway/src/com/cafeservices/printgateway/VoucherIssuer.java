@@ -16,8 +16,9 @@ import java.util.List;
  * receipt still prints, with placeholder codes clearly marked as such, and the
  * cashier can fall back to the pre-printed batch the cafe already keeps.
  *
- * Housekeeping happens AFTER the codes are in hand, in its own try, so a
- * problem clearing old groups cannot cost a customer their voucher.
+ * Housekeeping happens after the receipt has printed, in its own try, so a
+ * problem clearing old groups can cost a customer neither their voucher nor
+ * their time. See tidy().
  */
 public final class VoucherIssuer {
 
@@ -42,12 +43,14 @@ public final class VoucherIssuer {
     }
 
     public static void fill(PrintJob job, android.content.Context context) {
+        long startedAt = System.currentTimeMillis();
         ReceiptParser.Receipt receipt = ReceiptParser.parse(job.decoded);
         if (receipt.items.isEmpty()) {
             return;
         }
         SalePlan plan = SalePlan.from(receipt);
         if (!plan.printVoucher) {
+            job.issueMs = System.currentTimeMillis() - startedAt;
             return;
         }
 
@@ -64,6 +67,7 @@ public final class VoucherIssuer {
                 job.setIssuedCodes(already);
                 Log.i(PrintServerService.TAG, "same sale as the last print - "
                         + "reusing " + already.size() + " voucher(s)");
+                job.issueMs = System.currentTimeMillis() - startedAt;
                 return;
             }
         }
@@ -74,6 +78,7 @@ public final class VoucherIssuer {
             // retry: if the account login itself has gone, no amount of
             // reloading will help and the queue should not be kept waiting.
             if (!OmadaReconnector.revive(context) || !issue(job, plan, saleId)) {
+                job.issueMs = System.currentTimeMillis() - startedAt;
                 return;
             }
         }
@@ -82,6 +87,29 @@ public final class VoucherIssuer {
             SplitSales.remember(sale, job.issuedCodes());
         }
 
+        job.issueMs = System.currentTimeMillis() - startedAt;
+    }
+
+    /**
+     * Clear out spent groups and count the site. Call this AFTER printing.
+     *
+     * This used to run here, between the codes being in hand and the receipt
+     * being drawn, and it was measured at 600-900ms of a sale - larger, by the
+     * end, than issuing the codes. None of it is anything the customer needs:
+     * it deletes groups in which no code can still be redeemed and writes one
+     * line to the log about how full the site is.
+     *
+     * It also grows. Cleanup asks Omada for the codes of every group we own,
+     * one round trip each, and a group lives for as long as its vouchers can
+     * be redeemed - so the number of round trips tracks the last day's sales,
+     * and the queue got slower exactly as the cafe got busier. Measured at
+     * three of our groups it cost 604ms; at four, 922ms.
+     *
+     * Behind the paper it costs the customer nothing, and it still runs on
+     * every sale, so the cap is watched exactly as closely as before.
+     */
+    public static void tidy(PrintJob job) {
+        long startedAt = System.currentTimeMillis();
         try {
             int deleted = OmadaClient.cleanup();
             if (deleted > 0) {
@@ -94,5 +122,6 @@ public final class VoucherIssuer {
         } catch (Exception e) {
             Log.e(PrintServerService.TAG, "cleanup failed: " + e);
         }
+        job.tidyMs = System.currentTimeMillis() - startedAt;
     }
 }

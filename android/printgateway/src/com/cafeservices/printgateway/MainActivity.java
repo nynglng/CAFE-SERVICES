@@ -1,8 +1,10 @@
 package com.cafeservices.printgateway;
 
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
@@ -102,6 +104,147 @@ public class MainActivity extends Activity {
         });
 
         startGateway();
+        askToStayVisible();
+        askToBeLeftAlone();
+        checkNotificationsAllowed();
+    }
+
+    /**
+     * Ask for the one permission that actually keeps the gateway alive.
+     *
+     * Everything else we can do is a request the phone is free to ignore, and
+     * on this hardware it does: the service was frozen while awake, with
+     * notifications on and on the battery whitelist. An app holding a window
+     * on screen is the one thing these battery savers leave alone, because it
+     * is indistinguishable from an app being used.
+     *
+     * The window is a single transparent pixel. Nobody at the counter will
+     * ever see it, and it takes no touches - but Android will not let an app
+     * put anything on top of other apps without being asked first, so here we
+     * ask, and say why in terms of the thing that actually goes wrong.
+     */
+    private void askToStayVisible() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || android.provider.Settings.canDrawOverlays(this)) {
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Allow display over other apps")
+                .setMessage("Without this the phone freezes the gateway a few "
+                        + "minutes after you stop looking at it, and printing "
+                        + "from Loyverse does nothing until someone opens this "
+                        + "app.\n\nIt puts a single transparent dot on screen "
+                        + "that nobody can see or tap. That is what stops the "
+                        + "phone treating this as a background app.")
+                .setPositiveButton("Open settings", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        try {
+                            startActivity(new Intent(
+                                    android.provider.Settings
+                                            .ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:" + getPackageName())));
+                        } catch (Exception e) {
+                            startActivity(new Intent(
+                                    android.provider.Settings
+                                            .ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:" + getPackageName())));
+                        }
+                    }
+                })
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    /**
+     * Say plainly when the gateway is going to be frozen.
+     *
+     * Switching the app's notifications off is a reasonable thing to want -
+     * nobody at a counter should be wondering what a developer's tool is doing
+     * on the till - but it is also what stops the phone treating this as a
+     * foreground service, and a frozen gateway accepts no prints at all. It
+     * fails silently and looks exactly like a broken printer, which is the
+     * worst way for it to fail.
+     *
+     * The notification is now as quiet as Android permits: no sound, no
+     * pop-up, no badge, and it sits at the bottom of the shade. Not silent
+     * altogether - the system refuses to let a foreground service's channel
+     * sit at minimum importance and clamps it up, so a small status bar icon
+     * remains, and there is no way around that.
+     */
+    private void checkNotificationsAllowed() {
+        NotificationManager nm =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null || nm.areNotificationsEnabled()) {
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Turn notifications back on")
+                .setMessage("With notifications off, Android freezes this app "
+                        + "after a few minutes idle. Printing then does nothing "
+                        + "until someone opens it.\n\nIt shows no sound, no "
+                        + "pop-up and no status bar icon - only a silent line at "
+                        + "the bottom of the notification shade, reading "
+                        + "\"Receipt printer\".")
+                .setPositiveButton("Open settings", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        openNotificationSettings();
+                    }
+                })
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    private void openNotificationSettings() {
+        try {
+            Intent intent = new Intent(
+                    android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(intent);
+        } catch (Exception e) {
+            startActivity(new Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:" + getPackageName())));
+        }
+    }
+
+    /**
+     * Ask Android to stop putting the gateway to sleep.
+     *
+     * This is the single most effective thing for the counter's complaint that
+     * a print does nothing until the gateway is opened. Battery optimisation
+     * freezes an app that has been in the background a while, and the gateway
+     * spends every shift in the background behind the POS. Exempted, it is
+     * left running; not exempted, no amount of care in our own code reliably
+     * beats it.
+     *
+     * Asked once - Android shows the dialog only while the app is not already
+     * exempt, so this goes quiet as soon as the owner says yes.
+     *
+     * Note this is not the whole story on a phone-maker's Android. Several
+     * keep a second, private list of their own that no app can ask about;
+     * those have to be set by hand on the tablet.
+     */
+    private void askToBeLeftAlone() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        try {
+            android.os.PowerManager power =
+                    (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            if (power == null || power.isIgnoringBatteryOptimizations(getPackageName())) {
+                return;
+            }
+            startActivity(new Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            // Some builds hide the screen entirely. The owner can still reach
+            // it through Settings, and the gateway works either way.
+            android.util.Log.i(PrintServerService.TAG,
+                    "could not ask about battery optimisation: " + e);
+        }
     }
 
     private void startGateway() {
@@ -253,11 +396,31 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** "a", or "a and b" - the way a person would say it. */
+    private static String join(List<String> parts) {
+        if (parts.size() == 1) {
+            return parts.get(0) + " is";
+        }
+        return parts.get(0) + " and " + parts.get(1) + " are";
+    }
+
     private void render() {
         boolean running = PrintServerService.isRunning();
-        statusLine.setText(running
-                ? "Listening on port " + PrintServerService.PORT
-                : "Stopped");
+        NotificationManager nm =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        List<String> missing = new ArrayList<String>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !android.provider.Settings.canDrawOverlays(this)) {
+            missing.add("display over other apps");
+        }
+        if (nm != null && !nm.areNotificationsEnabled()) {
+            missing.add("notifications");
+        }
+        String listening = "Listening on port " + PrintServerService.PORT;
+        statusLine.setText(!running ? "Stopped"
+                : missing.isEmpty() ? listening
+                        : listening + " - but " + join(missing) + " off, so the "
+                                + "phone will freeze this within minutes");
         toggleButton.setText(running ? "Stop" : "Start");
         addressLine.setText(addresses());
         String printer = Settings.printerName();

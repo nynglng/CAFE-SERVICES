@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.cafeservices.printgateway"
-    android:versionCode="2"
+    android:versionCode="4"
     android:versionName="1.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="33" />
@@ -27,6 +27,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The tablet is switched off at closing time, so the gateway has to come
+         back by itself; nobody opens it in the morning. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Lets the app ask to be left alone by battery optimisation. Asking is
+         all it does - the answer is the owner's. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- One transparent pixel, so the phone counts this as a visible app and
+         its battery saver leaves it alone. See PrintServerService.presence. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:label="Print Gateway"
@@ -46,7 +56,22 @@
 
         <service
             android:name=".PrintServerService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Exported because the system is what delivers BOOT_COMPLETED. The
+             watchdog alarm addresses this class directly, so nothing else can
+             reach it by name. -->
+        <receiver
+            android:name=".Watchdog"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Some makers send only their own variant after a fast boot. -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
         <activity
         android:name=".OmadaLoginActivity"
         android:label="Connect Omada" />

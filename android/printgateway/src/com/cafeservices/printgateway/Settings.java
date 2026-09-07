@@ -32,6 +32,13 @@ public final class Settings {
     private static final String KEY_SITE_NAME = "siteName";
     private static final String KEY_SITES = "sites";
     private static final String KEY_PAPER = "paper";
+    private static final String KEY_PRINTER_LABEL = "printerLabel";
+    private static final String KEY_PRINT_WIDTH_MM = "printWidthMm";
+    private static final String KEY_DPI = "dpi";
+    private static final String KEY_INIT_CMD = "initCommands";
+    private static final String KEY_CUTTER_CMD = "cutterCommands";
+    private static final String KEY_DRAWER_CMD = "drawerCommands";
+    private static final String KEY_PRINT_RECEIPTS = "printReceipts";
     private static final String KEY_PRINTER_NAME = "printerName";
     private static final String KEY_PRINTER_ADDRESS = "printerAddress";
 
@@ -182,6 +189,92 @@ public final class Settings {
     public static void setPaperName(String value) {
         if (prefs != null && value != null && value.length() > 0) {
             prefs.edit().putString(KEY_PAPER, value).apply();
+        }
+    }
+
+    /**
+     * The printer's own settings, named and defaulted as Loyverse names and
+     * defaults them, so a cafe that has set up a Loyverse printer already
+     * knows what these are.
+     *
+     * The commands are the ones a printer's manual quotes and Loyverse takes
+     * as hex, e.g. "1D,56,42,00". Ours default to what Loyverse itself sends,
+     * which is why a printer configured for Loyverse needs nothing changed.
+     */
+    public static final String DEFAULT_CUTTER = "1D,56,42,00";
+    public static final String DEFAULT_DRAWER = "1B,70,00,19,FA";
+
+    /** Printable width in mm, as Loyverse's Print width dropdown offers. */
+    public static final int[] PRINT_WIDTH_CHOICES = {48, 72};
+    public static final int[] DPI_CHOICES = {203, 300};
+
+    /** What the operator called this printer. Cosmetic, as in Loyverse. */
+    public static String printerLabel() {
+        return prefs == null ? "RECEIPT PRINTER"
+                : prefs.getString(KEY_PRINTER_LABEL, "RECEIPT PRINTER");
+    }
+
+    public static void setPrinterLabel(String value) {
+        if (prefs != null) {
+            prefs.edit().putString(KEY_PRINTER_LABEL, value).apply();
+        }
+    }
+
+    /**
+     * Printable width in millimetres - 48 on 58mm paper, 72 on 80mm.
+     *
+     * Defaults from the detected paper rather than a fixed number, so a cafe
+     * that never opens this screen still prints the right width.
+     */
+    public static int printWidthMm() {
+        int fallback = PaperProfile.configured() == PaperProfile.WIDE ? 72 : 48;
+        return prefs == null ? fallback : prefs.getInt(KEY_PRINT_WIDTH_MM, fallback);
+    }
+
+    public static void setPrintWidthMm(int value) {
+        if (prefs != null) {
+            prefs.edit().putInt(KEY_PRINT_WIDTH_MM, value).apply();
+        }
+    }
+
+    public static int dpi() {
+        return prefs == null ? 203 : prefs.getInt(KEY_DPI, 203);
+    }
+
+    public static void setDpi(int value) {
+        if (prefs != null) {
+            prefs.edit().putInt(KEY_DPI, value).apply();
+        }
+    }
+
+    public static String initCommands() {
+        return prefs == null ? "" : prefs.getString(KEY_INIT_CMD, "");
+    }
+
+    public static String cutterCommands() {
+        return prefs == null ? DEFAULT_CUTTER : prefs.getString(KEY_CUTTER_CMD, DEFAULT_CUTTER);
+    }
+
+    public static String drawerCommands() {
+        return prefs == null ? DEFAULT_DRAWER : prefs.getString(KEY_DRAWER_CMD, DEFAULT_DRAWER);
+    }
+
+    public static void setCommands(String init, String cutter, String drawer) {
+        if (prefs != null) {
+            prefs.edit().putString(KEY_INIT_CMD, init == null ? "" : init)
+                    .putString(KEY_CUTTER_CMD, cutter == null ? "" : cutter)
+                    .putString(KEY_DRAWER_CMD, drawer == null ? "" : drawer).apply();
+        }
+    }
+
+    /** Loyverse's own toggle: a printer can be configured but not used. */
+    public static boolean printReceipts() {
+        return prefs == null || prefs.getBoolean(KEY_PRINT_RECEIPTS, true);
+    }
+
+    public static void setPrintReceipts(boolean value) {
+        if (prefs != null) {
+            prefs.edit().putBoolean(KEY_PRINT_RECEIPTS, value).apply();
         }
     }
 

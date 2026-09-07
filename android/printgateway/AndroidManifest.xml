@@ -73,6 +73,10 @@
             </intent-filter>
         </receiver>
         <activity
+        android:name=".PrinterSettingsActivity"
+        android:label="Printer" />
+
+    <activity
         android:name=".OmadaLoginActivity"
         android:label="Connect Omada" />
 

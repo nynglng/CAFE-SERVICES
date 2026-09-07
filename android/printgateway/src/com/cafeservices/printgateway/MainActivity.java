@@ -332,45 +332,18 @@ public class MainActivity extends Activity {
     public boolean onCreateOptionsMenu(android.view.Menu menu) {
         menu.add(0, MENU_PRINTER, 0, "Printer")
                 .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
-        menu.add(0, MENU_SETTINGS, 1, "Settings")
-                .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(android.view.MenuItem item) {
-        if (item.getItemId() == MENU_PRINTER) {
-            if (askForBluetooth()) {
-                PrinterPicker.show(this, new Runnable() {
-                    @Override
-                    public void run() {
-                        render();
-                    }
-                });
-            }
+        if (item.getItemId() == MENU_PRINTER || item.getItemId() == MENU_SETTINGS) {
+            // One screen now: the printer set up as Loyverse sets one up,
+            // with vouchering under it.
+            startActivity(new Intent(this, PrinterSettingsActivity.class));
             return true;
         }
-        if (item.getItemId() != MENU_SETTINGS) {
-            return super.onOptionsItemSelected(item);
-        }
-        SettingsDialog.show(this, new Runnable() {
-            @Override
-            public void run() {
-                // Jobs already on screen were drawn with the old wording, so
-                // they are redrawn: the point of changing a setting is seeing
-                // what it does to the slip.
-                for (PrintJob job : PrintServerService.jobs()) {
-                    job.forgetReplica();
-                }
-                render();
-                android.widget.Toast.makeText(MainActivity.this,
-                        "Saved. " + Settings.ssid() + ", valid "
-                                + Settings.accessHours() + "h, expires in "
-                                + Settings.expiryHours() + "h",
-                        android.widget.Toast.LENGTH_LONG).show();
-            }
-        });
-        return true;
+        return super.onOptionsItemSelected(item);
     }
 
     @Override

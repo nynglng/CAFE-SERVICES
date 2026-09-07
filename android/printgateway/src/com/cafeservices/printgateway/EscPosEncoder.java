@@ -31,17 +31,13 @@ import java.io.ByteArrayOutputStream;
  */
 public final class EscPosEncoder {
 
-    /** ESC p 0 25 250 - the pulse Loyverse opens a sale's print with. */
-    private static final byte[] DRAWER = {0x1B, 0x70, 0x00, 0x19, (byte) 0xFA};
-
-    /** ESC @ */
+    /** ESC @ - always sent, as Loyverse does, before anything configured. */
     private static final byte[] INIT = {0x1B, 0x40};
 
     /** ESC d 1 - feed, so the cut does not land on the last line of text. */
     private static final byte[] FEED = {0x1B, 0x64, 0x01};
 
-    /** GS V B 0 */
-    private static final byte[] CUT = {0x1D, 0x56, 0x42, 0x00};
+
 
     /**
      * Rows per band. Small enough for a modest printer buffer, large enough
@@ -79,9 +75,12 @@ public final class EscPosEncoder {
     public static byte[] encode(Bitmap bitmap, boolean openTill) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         if (openTill) {
-            out.write(DRAWER, 0, DRAWER.length);
+            write(out, hex(Settings.drawerCommands()));
         }
         out.write(INIT, 0, INIT.length);
+        // Loyverse leaves its "Initial ESC/POS commands" box empty by default;
+        // a printer that needs a code page or a density set says so here.
+        write(out, hex(Settings.initCommands()));
 
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
@@ -160,7 +159,37 @@ public final class EscPosEncoder {
         }
 
         out.write(FEED, 0, FEED.length);
-        out.write(CUT, 0, CUT.length);
+        write(out, hex(Settings.cutterCommands()));
+        return out.toByteArray();
+    }
+
+    private static void write(ByteArrayOutputStream out, byte[] bytes) {
+        if (bytes.length > 0) {
+            out.write(bytes, 0, bytes.length);
+        }
+    }
+
+    /**
+     * Read a command the way a printer manual quotes it and Loyverse takes it:
+     * hex bytes, comma or space separated, e.g. "1D,56,42,00".
+     *
+     * Anything unparseable is dropped rather than guessed at - a stray byte in
+     * a control sequence prints garbage across the paper, and an empty box is
+     * a perfectly ordinary setting.
+     */
+    static byte[] hex(String text) {
+        if (text == null || text.trim().length() == 0) {
+            return new byte[0];
+        }
+        String[] parts = text.trim().split("[, ]+");
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        for (String part : parts) {
+            try {
+                out.write(Integer.parseInt(part.trim(), 16) & 0xFF);
+            } catch (NumberFormatException e) {
+                return new byte[0];
+            }
+        }
         return out.toByteArray();
     }
 

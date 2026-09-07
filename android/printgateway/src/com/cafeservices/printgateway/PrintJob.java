@@ -76,8 +76,8 @@ public final class PrintJob {
         if (plan.printVoucher) {
             bottom = hasIssuedCodes()
                     ? VoucherRenderer.render(issuedCodes, Settings.ssid(),
-                            Settings.accessHours(), Settings.expiryHours())
-                    : VoucherRenderer.renderUnavailable();
+                            Settings.accessHours(), Settings.expiryHours(), receipt.paper)
+                    : VoucherRenderer.renderUnavailable(receipt.paper);
         }
         replicaBitmap = stack(top, bottom);
         return replicaBitmap;

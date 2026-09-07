@@ -29,7 +29,8 @@ import java.util.List;
  */
 public final class VoucherRenderer {
 
-    private static final int PAPER_WIDTH = ReceiptRenderer.PAPER_WIDTH;
+    /** Set for the duration of a render, as in ReceiptRenderer. */
+    private static PaperProfile paper = PaperProfile.NARROW;
 
     private static final float TITLE_SIZE = ReceiptRenderer.TOTAL_SIZE;
     private static final float CODE_SIZE = ReceiptRenderer.TOTAL_SIZE;
@@ -87,7 +88,8 @@ public final class VoucherRenderer {
      * else. A heading promising a voucher above a line admitting there is not
      * one only reads as a printer fault.
      */
-    public static Bitmap renderUnavailable() {
+    public static Bitmap renderUnavailable(PaperProfile onPaper) {
+        paper = onPaper;
         Paint detailPaint = paint(DETAIL_SIZE, false);
 
         List<String> lines = new ArrayList<String>();
@@ -95,7 +97,7 @@ public final class VoucherRenderer {
         lines.add("for a wi-fi voucher");
 
         int height = PAD_TOP + DETAIL_PITCH * lines.size() + PAD_BOTTOM;
-        Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(paper.paperWidth, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
@@ -114,10 +116,11 @@ public final class VoucherRenderer {
      * @param expiryHours  how long an unredeemed code stays alive
      */
     public static Bitmap render(List<String> codes, String ssid, int accessHours,
-                                int expiryHours) {
+                                int expiryHours, PaperProfile onPaper) {
         if (codes.isEmpty()) {
             return null;
         }
+        paper = onPaper;
 
         Paint titlePaint = paint(TITLE_SIZE, true);
         Paint codePaint = paint(CODE_SIZE, false);
@@ -135,7 +138,7 @@ public final class VoucherRenderer {
                 + DETAIL_PITCH * details.size()
                 + PAD_BOTTOM;
 
-        Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(paper.paperWidth, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
@@ -156,6 +159,6 @@ public final class VoucherRenderer {
     /** Draws text centred on the paper, with y as its baseline. */
     private static void centre(Canvas canvas, String text, int y, Paint p) {
         float w = p.measureText(text);
-        canvas.drawText(text, (PAPER_WIDTH - w) / 2f, y + p.getTextSize(), p);
+        canvas.drawText(text, (paper.paperWidth - w) / 2f, y + p.getTextSize(), p);
     }
 }

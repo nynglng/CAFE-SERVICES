@@ -37,10 +37,17 @@ import java.util.List;
  */
 public final class ReceiptRenderer {
 
-    public static final int PAPER_WIDTH = 384;
+    /**
+     * The paper this render is drawing on, set for the duration of render().
+     *
+     * Follows the same pattern as textPaint below: the layout and the blocks
+     * both need it, and threading it through every signature bought nothing -
+     * one job is drawn at a time.
+     */
+    private static PaperProfile paper = PaperProfile.NARROW;
 
     private static final int MARGIN_LEFT = 2;
-    private static final int MARGIN_RIGHT = 382;
+
     /**
      * Where a name has to stop so it cannot run into the amount.
      *
@@ -53,7 +60,7 @@ public final class ReceiptRenderer {
      * middle of that window rather than against either edge. The amount's ink
      * begins at 308, so this also leaves the column clear.
      */
-    private static final int NAME_COLUMN_RIGHT = 291;
+
 
     /**
      * Loyverse prints the peso sign before every amount, but sends it as 0x7F
@@ -118,6 +125,7 @@ public final class ReceiptRenderer {
         if (!plan.printReceipt) {
             return null;
         }
+        paper = receipt.paper;
 
         Paint text = body(false, BODY_SIZE);
         Paint bold = body(true, HEADER_SIZE);
@@ -133,7 +141,7 @@ public final class ReceiptRenderer {
         }
         height += 12;
 
-        Bitmap bitmap = Bitmap.createBitmap(PAPER_WIDTH, height, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(paper.paperWidth, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
         for (Block b : blocks) {
@@ -189,13 +197,13 @@ public final class ReceiptRenderer {
             float baseline = y + height();
             if (centred) {
                 float w = p.measureText(left);
-                c.drawText(left, (PAPER_WIDTH - w) / 2f, baseline, p);
+                c.drawText(left, (paper.paperWidth - w) / 2f, baseline, p);
                 return;
             }
             c.drawText(left, MARGIN_LEFT, baseline, p);
             if (right != null && right.length() > 0) {
                 float w = p.measureText(right);
-                c.drawText(right, MARGIN_RIGHT - w, baseline, p);
+                c.drawText(right, paper.marginRight - w, baseline, p);
             }
         }
     }
@@ -211,7 +219,7 @@ public final class ReceiptRenderer {
             Paint p = new Paint();
             p.setColor(Color.BLACK);
             // Dotted, matching the printed rule: a dot every 4px.
-            for (int x = MARGIN_LEFT; x <= MARGIN_RIGHT; x += 4) {
+            for (int x = MARGIN_LEFT; x <= paper.marginRight; x += 4) {
                 c.drawRect(x, y, x + 2, y + 2, p);
             }
         }
@@ -229,7 +237,7 @@ public final class ReceiptRenderer {
      * Item names are the one exception. Loyverse broke those to fit its
      * 22-character text field, but graphic mode breaks on pixels and lands
      * elsewhere, so an item's rows are replaced by its rejoined name
-     * re-wrapped against NAME_COLUMN_RIGHT.
+     * re-wrapped against the paper's name column.
      */
     private static List<Block> layout(SalePlan plan, ReceiptParser.Receipt receipt,
                                       String header) {
@@ -253,7 +261,7 @@ public final class ReceiptRenderer {
                     continue; // replaced by the voucher below
                 }
                 List<String> lines = wrap(item.name, textPaint,
-                        NAME_COLUMN_RIGHT - MARGIN_LEFT);
+                        paper.nameColumnRight - MARGIN_LEFT);
                 for (int n = 0; n < lines.size(); n++) {
                     Row r = new Row();
                     r.left = lines.get(n);

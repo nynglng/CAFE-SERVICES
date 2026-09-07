@@ -32,14 +32,14 @@ import java.util.regex.Pattern;
 public final class ReceiptParser {
 
     /**
-     * Loyverse's row width in text mode on the client's 58mm paper.
+     * The paper this parser assumes when nobody says otherwise.
      *
-     * Measured off real captures from the site: dividers are exactly this wide
-     * and amounts are right-aligned to this column. An earlier 48 came from an
-     * 80mm test print, and at that setting NOTHING parses - every item row is
-     * cut in the wrong place - so this constant is load-bearing.
+     * Row width is load-bearing: at the wrong setting NOTHING parses, because
+     * every item row is cut in the wrong place. Which paper a print came off
+     * is now worked out from the print itself - see PaperProfile.detect - and
+     * this only covers the case where a caller does not care.
      */
-    public static final int COLUMNS = 32;
+    public static final int COLUMNS = PaperProfile.NARROW.columns;
 
     /**
      * Width of the item-name field before the amount column.
@@ -56,7 +56,7 @@ public final class ReceiptParser {
      * Amounts occupy the last 10 columns, right-aligned, which is what leaves
      * 22 for the name.
      */
-    public static final int NAME_FIELD = 22;
+    public static final int NAME_FIELD = PaperProfile.NARROW.nameField;
 
     /** "seasalt                       170.00" - a name and its amount. */
     private static final Pattern ITEM =
@@ -110,6 +110,8 @@ public final class ReceiptParser {
     }
 
     public static final class Receipt {
+        /** The paper this print came off, decided by PaperProfile.detect. */
+        public PaperProfile paper = PaperProfile.NARROW;
         public final List<Item> items = new ArrayList<Item>();
         public String receiptNumber = "";
         /** The reflowed rows, as the printer would have wrapped them. */
@@ -130,9 +132,14 @@ public final class ReceiptParser {
     }
 
     public static Receipt parse(EscPosDecoder.Result decoded) {
+        return parse(decoded, PaperProfile.detect(decoded));
+    }
+
+    public static Receipt parse(EscPosDecoder.Result decoded, PaperProfile paper) {
         Receipt receipt = new Receipt();
+        receipt.paper = paper;
         for (EscPosDecoder.Line line : decoded.lines) {
-            receipt.rows.addAll(reflow(line.text));
+            receipt.rows.addAll(reflow(line.text, paper));
         }
 
         for (int i = 0; i < receipt.rows.size(); i++) {
@@ -163,7 +170,7 @@ public final class ReceiptParser {
                         || QUANTITY.matcher(next).find()) {
                     break;
                 }
-                name = joinName(name, next.trim());
+                name = joinName(name, next.trim(), paper.nameField);
                 j++;
             }
 
@@ -201,8 +208,8 @@ public final class ReceiptParser {
      * the halves join directly. Getting this backwards silently corrupts every
      * long item name, so it is worth stating plainly.
      */
-    static String joinName(String soFar, String continuation) {
-        return soFar.length() >= NAME_FIELD
+    static String joinName(String soFar, String continuation, int nameField) {
+        return soFar.length() >= nameField
                 ? soFar + continuation
                 : soFar + " " + continuation;
     }
@@ -214,6 +221,10 @@ public final class ReceiptParser {
      * decoder is really several rows glued together.
      */
     public static List<String> reflow(String text) {
+        return reflow(text, PaperProfile.NARROW);
+    }
+
+    public static List<String> reflow(String text, PaperProfile paper) {
         List<String> rows = new ArrayList<String>();
         String clean = normalise(text);
         if (clean.length() == 0) {
@@ -222,7 +233,7 @@ public final class ReceiptParser {
         }
         int start = 0;
         while (start < clean.length()) {
-            int end = Math.min(start + COLUMNS, clean.length());
+            int end = Math.min(start + paper.columns, clean.length());
             rows.add(clean.substring(start, end));
             start = end;
         }

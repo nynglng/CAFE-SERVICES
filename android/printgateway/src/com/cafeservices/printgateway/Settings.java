@@ -31,6 +31,7 @@ public final class Settings {
     private static final String KEY_SITE_ID = "siteId";
     private static final String KEY_SITE_NAME = "siteName";
     private static final String KEY_SITES = "sites";
+    private static final String KEY_PAPER = "paper";
     private static final String KEY_PRINTER_NAME = "printerName";
     private static final String KEY_PRINTER_ADDRESS = "printerAddress";
 
@@ -163,6 +164,24 @@ public final class Settings {
         if (prefs != null) {
             prefs.edit().putStringSet(KEY_SITES,
                     new LinkedHashSet<String>(rows)).apply();
+        }
+    }
+
+    /**
+     * The paper size, for prints that cannot say which they came off.
+     *
+     * Normally nothing reads this: PaperProfile.detect works it out from the
+     * print itself, which is what makes a new cafe a matter of installing the
+     * app rather than editing it.
+     */
+    public static String paperName() {
+        return prefs == null ? PaperProfile.NARROW.name
+                : prefs.getString(KEY_PAPER, PaperProfile.NARROW.name);
+    }
+
+    public static void setPaperName(String value) {
+        if (prefs != null && value != null && value.length() > 0) {
+            prefs.edit().putString(KEY_PAPER, value).apply();
         }
     }
 

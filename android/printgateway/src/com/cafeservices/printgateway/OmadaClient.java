@@ -32,6 +32,17 @@ public final class OmadaClient {
     public static final String POS_PREFIX = "POS-";
 
     /** Omada's validity modes. Permanent is what made vouchers pile up. */
+    /**
+     * What Omada means by a voucher's status.
+     *
+     * IN_USE is the one that matters and the one that was missed: a guest has
+     * redeemed the code and is on the wifi right now. Deleting its group cuts
+     * them off mid-session.
+     */
+    public static final int STATUS_UNUSED = 0;
+    public static final int STATUS_IN_USE = 1;
+    public static final int STATUS_EXPIRED = 2;
+
     public static final int VALIDITY_PERMANENT = 0;
     public static final int VALIDITY_FIXED_DATES = 1;
 
@@ -267,7 +278,29 @@ public final class OmadaClient {
     }
 
     /**
-     * Delete our own groups in which no code can still be redeemed.
+     * Whether a code is still worth something to somebody.
+     *
+     * Two ways that can be true, and only the first was checked before, which
+     * cut paying customers off the wifi: a group where every code had been
+     * redeemed looked spent, so it was deleted while people were still using
+     * it. A code someone is on right now is the last thing that should go.
+     *
+     * An in-use code is kept regardless of its expiry timestamp. That
+     * timestamp bounds when a code may be *redeemed*, not how long the access
+     * it bought lasts - redeem one at ten to midnight and the two hours run
+     * past it - so treating a passed expiry as "spent" would be the same bug
+     * again in a narrower window. Omada moves a finished code to EXPIRED by
+     * itself, and that is the signal to trust.
+     */
+    private static boolean stillWorthKeeping(Voucher v, long now) {
+        if (v.status == STATUS_IN_USE) {
+            return true;
+        }
+        return v.status == STATUS_UNUSED && (v.endTime == null || v.endTime > now);
+    }
+
+    /**
+     * Delete our own groups in which no code is unused or in use.
      *
      * Omada flips a code to expired but never deletes it, and expired codes
      * still count towards the cap, so this is what keeps the count down.
@@ -282,7 +315,7 @@ public final class OmadaClient {
             }
             boolean stillUsable = false;
             for (Voucher v : listCodes(group.id)) {
-                if (v.status == 0 && (v.endTime == null || v.endTime > now)) {
+                if (stillWorthKeeping(v, now)) {
                     stillUsable = true;
                     break;
                 }

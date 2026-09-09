@@ -32,8 +32,35 @@ export function ownedByService(g: CloudGroup): boolean {
   );
 }
 
+/** What Omada means by a voucher's status. */
+export const STATUS_UNUSED = 0;
+export const STATUS_IN_USE = 1;
+export const STATUS_EXPIRED = 2;
+
 /**
- * Groups of ours where no code can still be redeemed.
+ * Whether a code is still worth something to somebody.
+ *
+ * Only the unused case was checked here at first, and that cut paying
+ * customers off the wifi: once every code in a group had been redeemed the
+ * group looked spent, so the next sale deleted it out from under them.
+ *
+ * An in-use code is kept whatever its expiry says. That timestamp bounds when
+ * a code may be redeemed, not how long the access it bought lasts - redeem one
+ * at ten to midnight and the two hours run past it - so reading a passed
+ * expiry as "spent" would be the same mistake in a narrower window. Omada
+ * moves a finished code to EXPIRED on its own, and that is the signal to
+ * trust.
+ */
+export function stillWorthKeeping(
+  c: { status: number; endTime: number | null },
+  now: number,
+): boolean {
+  if (c.status === STATUS_IN_USE) return true;
+  return c.status === STATUS_UNUSED && (c.endTime === null || c.endTime > now);
+}
+
+/**
+ * Groups of ours where no code is unused or in use.
  *
  * Omada does flip a code to status 2 once its expiry passes (verified against
  * the live site), but the expiry timestamp is checked as well so this stays
@@ -49,9 +76,7 @@ export async function findSpentGroups(
   const spent: CloudGroup[] = [];
   for (const g of candidates) {
     const codes = await cloud.listCodes(g.id);
-    const stillUsable = codes.some(
-      (c) => c.status === 0 && (c.endTime === null || c.endTime > now),
-    );
+    const stillUsable = codes.some((c) => stillWorthKeeping(c, now));
     if (!stillUsable) spent.push(g);
   }
   return { candidates, spent };

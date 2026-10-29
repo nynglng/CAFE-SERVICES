@@ -19,6 +19,7 @@
 import './_live-errors.ts';
 import { OmadaSession } from '../src/omada/session.ts';
 import { OmadaCloudClient } from '../src/omada/cloud.ts';
+import { accountId, siteId } from './_account.ts';
 
 const TEST_PREFIXES = ['ZZ-EXPTEST-', 'ZZ-VERIFY-', 'ZZ-APITEST-'];
 
@@ -30,11 +31,11 @@ const session = new OmadaSession({
     process.env.CHROME_EXE ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   portalUrl: 'https://aps1-omada-cloud.tplinkcloud.com/',
   apiBase: 'https://aps1-api-omada-essential-controller.tplinkcloud.com',
-  omadacId: '<omada-account-id>',
+  omadacId: accountId(),
   headed: process.env.HEADED === '1',
 });
 
-const SITE = process.env.OMADA_SITE_ID ?? '<omada-site-id>';
+const SITE = siteId();
 const statusName = (s: number): string =>
   s === 0 ? 'unused' : s === 1 ? 'in use' : s === 2 ? 'EXPIRED' : `unknown(${s})`;
 

@@ -16,6 +16,7 @@
 import './_live-errors.ts';
 import { OmadaSession } from '../src/omada/session.ts';
 import { OmadaCloudClient, ValidityType } from '../src/omada/cloud.ts';
+import { accountId, siteId } from './_account.ts';
 
 const session = new OmadaSession({
   profileDir:
@@ -25,11 +26,11 @@ const session = new OmadaSession({
     process.env.CHROME_EXE ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   portalUrl: 'https://aps1-omada-cloud.tplinkcloud.com/',
   apiBase: 'https://aps1-api-omada-essential-controller.tplinkcloud.com',
-  omadacId: '<omada-account-id>',
+  omadacId: accountId(),
   headed: process.env.HEADED === '1',
 });
 
-const SITE = process.env.OMADA_SITE_ID ?? '<omada-site-id>';
+const SITE = siteId();
 const MINUTES = Number(process.env.EXPIRE_MINUTES ?? '2');
 
 const statusName = (s: number): string =>

@@ -26,6 +26,7 @@ import {
   findSpentGroups,
 } from '../src/omada/housekeeping.ts';
 import type { CloudGroup } from '../src/omada/cloud.ts';
+import { accountId, siteId } from './_account.ts';
 
 /** Defaults matching how the cafe sells WiFi today. */
 const SESSION_MINUTES = 120; // access time, counted from first login
@@ -43,11 +44,11 @@ const session = new OmadaSession({
     process.env.CHROME_EXE ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   portalUrl: 'https://aps1-omada-cloud.tplinkcloud.com/',
   apiBase: 'https://aps1-api-omada-essential-controller.tplinkcloud.com',
-  omadacId: '<omada-account-id>',
+  omadacId: accountId(),
   headed: process.env.HEADED === '1',
 });
 
-const SITE = process.env.OMADA_SITE_ID ?? '<omada-site-id>';
+const SITE = siteId();
 
 console.log('Connecting to Omada Cloud (this takes ~15s)...');
 await session.open();

@@ -11,6 +11,7 @@
 
 import './_live-errors.ts';
 import { OmadaSession } from '../src/omada/session.ts';
+import { accountId, siteId } from './_account.ts';
 
 const session = new OmadaSession({
   profileDir:
@@ -20,11 +21,11 @@ const session = new OmadaSession({
     process.env.CHROME_EXE ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   portalUrl: 'https://aps1-omada-cloud.tplinkcloud.com/',
   apiBase: 'https://aps1-api-omada-essential-controller.tplinkcloud.com',
-  omadacId: '<omada-account-id>',
+  omadacId: accountId(),
   headed: true,
 });
 
-const SITE = '<omada-site-id>';
+const SITE = siteId();
 const HOTSPOT = `/api/v2/hotspot/sites/${SITE}`;
 
 console.log('Opening session...');

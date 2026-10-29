@@ -127,7 +127,9 @@ public final class VoucherRenderer {
         Paint detailPaint = paint(DETAIL_SIZE, false);
 
         List<String> details = new ArrayList<String>();
-        details.add("Wi-Fi Name: " + ssid);
+        if (ssid.length() > 0) {
+            details.add("Wi-Fi Name: " + ssid);
+        }
         details.add(validityLine(accessHours));
         details.add(expiryLine(expiryHours));
 

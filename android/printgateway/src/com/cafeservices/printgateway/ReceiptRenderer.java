@@ -165,7 +165,6 @@ public final class ReceiptRenderer {
     private static void calibrate(Paint text) {
         android.util.Log.i(PrintServerService.TAG, "type check:"
                 + " size=" + text.getTextSize()
-                + " upper15=" + text.measureText("CAFE STORE NAME") + " (real 197)"
                 + " upper19=" + text.measureText("ABCDEFGHIJKLMNOPQRS") + " (real 286)");
     }
 

@@ -64,17 +64,21 @@ to nudge the app along.
 When the cloud login itself has expired, no amount of waiting helps — run
 `npm run login`, which opens a visible window and waits for a real sign-in.
 
-## Identifiers (this account)
+## Identifiers
 
 | Thing | Value |
 | --- | --- |
 | API base | `https://aps1-api-omada-essential-controller.tplinkcloud.com` |
 | Portal UI | `https://aps1-omada-cloud.tplinkcloud.com/` |
-| Omadac ID | `<omada-account-id>` |
-| Site (The Cafe) | `<omada-site-id>` |
-| Portal id | `<omada-portal-id>` |
+| Omadac ID | 32 hex characters, one per account |
+| Site id | 24 hex characters, one per cafe |
 
 Paths are `{apiBase}/{omadacId}/api/v2/hotspot/sites/{siteId}/...`
+
+The ids belong to a client's account, so they are kept out of the repo. The
+Android gateway learns both from whoever signs in. The PC tools read
+`OMADA_ACCOUNT_ID` and `OMADA_SITE_ID` from `.env`. Any portal call in the
+browser's Network tab shows both in its path.
 
 ## Endpoints
 

@@ -46,13 +46,16 @@ Omada Cloud site need two more things, and neither travels with the repo:
    that profile, not in this repo, so on a new machine you must log in once by
    hand. Nothing is stored in git, by design.
 
-Point the tools at that machine's paths with environment variables (defaults
-assume the original workstation's layout):
+Point the tools at that machine's paths and at your Omada account with
+environment variables. The live `npm run` commands read them from a `.env`
+file in the repo root, which git ignores; copy `.env.example` to start one.
+Path defaults assume the original workstation's layout:
 
 ```bash
 CHROME_PROFILE="C:/path/to/a/chrome-profile"
 CHROME_EXE="C:/Program Files/Google/Chrome/Application/chrome.exe"
-OMADA_SITE_ID=<omada-site-id>     # optional, defaults to the cafe site
+OMADA_ACCOUNT_ID=...                        # required - see .env.example
+OMADA_SITE_ID=...                           # required - see .env.example
 HEADED=1                                    # show the window, e.g. to log in
 ```
 

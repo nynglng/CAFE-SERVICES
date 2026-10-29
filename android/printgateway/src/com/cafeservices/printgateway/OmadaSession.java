@@ -75,6 +75,9 @@ public final class OmadaSession {
      * thread.
      */
     public static boolean isConnected() {
+        if (Settings.accountId().length() == 0) {
+            return false; // nobody has signed in on this install yet
+        }
         try {
             JSONObject result = get("/api/v2/hotspot/loginStatus?needToken=true");
             return result != null && result.optBoolean("login", false);

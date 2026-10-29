@@ -43,8 +43,12 @@ public final class Settings {
     private static final String KEY_PRINTER_NAME = "printerName";
     private static final String KEY_PRINTER_ADDRESS = "printerAddress";
 
-    /** The client this was built for; the first thing the list should offer. */
-    public static final String DEFAULT_SSID = "CAFE";
+    /**
+     * Nothing until the cafe's own network is typed in under Printer: a
+     * guessed name would send a guest looking for a network that is not
+     * there. The slip leaves the line out while it is blank.
+     */
+    public static final String DEFAULT_SSID = "";
     public static final int DEFAULT_ACCESS_HOURS = 2;
 
     /**
@@ -63,12 +67,9 @@ public final class Settings {
      * issuing another cafe's codes would fail silently, since the codes are
      * created happily and simply do not work on the network in the room.
      *
-     * The values below are only what a fresh install assumes before anyone has
-     * signed in; the first connection replaces them.
+     * Nothing is assumed before then: whichever Omada account signs in is the
+     * one the vouchers are made in, so a fresh install knows none of these.
      */
-    public static final String DEFAULT_ACCOUNT_ID = "<omada-account-id>";
-    public static final String DEFAULT_SITE_ID = "<omada-site-id>";
-    public static final String DEFAULT_ORG_NAME = "CAFE";
 
     private static SharedPreferences prefs;
 
@@ -121,17 +122,17 @@ public final class Settings {
      */
     public static List<String> networks() {
         Set<String> all = new LinkedHashSet<String>();
-        all.add(DEFAULT_SSID);
         if (prefs != null) {
             all.addAll(prefs.getStringSet(KEY_NETWORKS, new LinkedHashSet<String>()));
         }
-        all.add(ssid());
+        if (ssid().length() > 0) {
+            all.add(ssid());
+        }
         return new ArrayList<String>(all);
     }
 
     public static String accountId() {
-        return prefs == null ? DEFAULT_ACCOUNT_ID
-                : prefs.getString(KEY_ACCOUNT_ID, DEFAULT_ACCOUNT_ID);
+        return prefs == null ? "" : prefs.getString(KEY_ACCOUNT_ID, "");
     }
 
     public static void setAccountId(String value) {
@@ -146,7 +147,7 @@ public final class Settings {
      * rather than going straight in - see OmadaPortal.
      */
     public static String orgName() {
-        return prefs == null ? DEFAULT_ORG_NAME : prefs.getString(KEY_ORG_NAME, DEFAULT_ORG_NAME);
+        return prefs == null ? "" : prefs.getString(KEY_ORG_NAME, "");
     }
 
     public static void setOrgName(String value) {
@@ -156,7 +157,7 @@ public final class Settings {
     }
 
     public static String siteId() {
-        return prefs == null ? DEFAULT_SITE_ID : prefs.getString(KEY_SITE_ID, DEFAULT_SITE_ID);
+        return prefs == null ? "" : prefs.getString(KEY_SITE_ID, "");
     }
 
     /** For the screen: the cafe by name, so a wrong site is obvious. */

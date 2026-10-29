@@ -16,6 +16,7 @@
  */
 
 import { chromium } from 'playwright-core';
+import { accountId, siteId } from './_account.ts';
 
 const PROFILE_DIR =
   process.env.CHROME_PROFILE ??
@@ -25,8 +26,8 @@ const CHROME_EXE =
 
 const PORTAL = 'https://aps1-omada-cloud.tplinkcloud.com/';
 const API = 'https://aps1-api-omada-essential-controller.tplinkcloud.com';
-const OMADAC = '<omada-account-id>';
-const SITE = '<omada-site-id>';
+const OMADAC = accountId();
+const SITE = siteId();
 
 const context = await chromium.launchPersistentContext(PROFILE_DIR, {
   executablePath: CHROME_EXE,

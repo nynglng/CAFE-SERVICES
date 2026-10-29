@@ -85,6 +85,7 @@ public final class OmadaDiscovery {
                 return;
             }
             Settings.setAccountId(result.optString("omadacId", null));
+            rememberOrgName();
 
             List<Site> sites = sitesFrom(result);
             List<String> rows = new ArrayList<String>();
@@ -111,6 +112,22 @@ public final class OmadaDiscovery {
             }
         } catch (Exception e) {
             Log.i(PrintServerService.TAG, "could not read account: " + e.getMessage());
+        }
+    }
+
+    /**
+     * The name on this organization's card in the portal's list, which is
+     * what OmadaPortal presses when the portal stops there. Kept apart from
+     * refresh()'s own try: losing this must not lose the site.
+     */
+    private static void rememberOrgName() {
+        try {
+            JSONObject result = OmadaSession.get("/api/v2/hotspot/maintenance/controllerName");
+            if (result != null) {
+                Settings.setOrgName(result.optString("name", null));
+            }
+        } catch (Exception e) {
+            Log.i(PrintServerService.TAG, "could not read org name: " + e.getMessage());
         }
     }
 

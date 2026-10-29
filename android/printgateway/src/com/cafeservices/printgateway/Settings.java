@@ -28,6 +28,7 @@ public final class Settings {
     private static final String KEY_EXPIRY_HOURS = "expiryHours";
     private static final String KEY_NETWORKS = "networks";
     private static final String KEY_ACCOUNT_ID = "omadacId";
+    private static final String KEY_ORG_NAME = "orgName";
     private static final String KEY_SITE_ID = "siteId";
     private static final String KEY_SITE_NAME = "siteName";
     private static final String KEY_SITES = "sites";
@@ -67,6 +68,7 @@ public final class Settings {
      */
     public static final String DEFAULT_ACCOUNT_ID = "<omada-account-id>";
     public static final String DEFAULT_SITE_ID = "<omada-site-id>";
+    public static final String DEFAULT_ORG_NAME = "CAFE";
 
     private static SharedPreferences prefs;
 
@@ -135,6 +137,21 @@ public final class Settings {
     public static void setAccountId(String value) {
         if (prefs != null && value != null && value.length() > 0) {
             prefs.edit().putString(KEY_ACCOUNT_ID, value).apply();
+        }
+    }
+
+    /**
+     * The organization's name, as its card on the portal's list prints it.
+     * That card is what has to be pressed when the portal stops on the list
+     * rather than going straight in - see OmadaPortal.
+     */
+    public static String orgName() {
+        return prefs == null ? DEFAULT_ORG_NAME : prefs.getString(KEY_ORG_NAME, DEFAULT_ORG_NAME);
+    }
+
+    public static void setOrgName(String value) {
+        if (prefs != null && value != null && value.length() > 0) {
+            prefs.edit().putString(KEY_ORG_NAME, value).apply();
         }
     }
 

@@ -5,6 +5,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.webkit.CookieManager;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -30,10 +31,25 @@ public class OmadaLoginActivity extends Activity {
     /** How often to ask the controller whether it knows us yet. */
     private static final long POLL_MS = 4000;
 
+    /**
+     * When the portal goes into the organization by itself it does so within
+     * a second or two of loading. Still out after this, it has stopped on its
+     * list, and the card wants pressing.
+     */
+    private static final long PRESS_AFTER_MS = 6000;
+
+    /** A press that went nowhere is tried again, not hammered. */
+    private static final long PRESS_EVERY_MS = 12000;
+
     private WebView web;
     private TextView status;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean finishing;
+
+    /** Polls running that the controller has said yes; see OmadaPortal. */
+    private int connectedPolls;
+    private long pageLoadedAt = SystemClock.elapsedRealtime();
+    private long pressedAt;
 
     private final Runnable poll = new Runnable() {
         @Override
@@ -58,11 +74,12 @@ public class OmadaLoginActivity extends Activity {
             cookies.setAcceptThirdPartyCookies(web, true);
         }
 
-        web.getSettings().setJavaScriptEnabled(true);
-        web.getSettings().setDomStorageEnabled(true);
+        OmadaPortal.configure(web);
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                pageLoadedAt = SystemClock.elapsedRealtime();
+                connectedPolls = 0;
                 probe(view);
                 // The page being up is not the same as the controller knowing
                 // us, so this only restarts the polling.
@@ -121,6 +138,24 @@ public class OmadaLoginActivity extends Activity {
     }
 
     /**
+     * Press the organization's card if the portal has stopped on its list,
+     * which is the step a person used to have to race the timer to do.
+     */
+    private void pressCardIfStuck() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - pageLoadedAt < PRESS_AFTER_MS || now - pressedAt < PRESS_EVERY_MS) {
+            return;
+        }
+        pressedAt = now;
+        OmadaPortal.enterOrganization(web, new Runnable() {
+            @Override
+            public void run() {
+                status.setText("Opening " + Settings.orgName() + "...");
+            }
+        });
+    }
+
+    /**
      * Ask the controller whether this session is real.
      *
      * @param manual true when the operator pressed Done, which is also the way
@@ -138,17 +173,29 @@ public class OmadaLoginActivity extends Activity {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
+                        if (finishing) {
+                            return;
+                        }
                         if (connected) {
+                            // One yes is not enough: stopped on its list of
+                            // organizations, the portal gives one that is gone
+                            // a moment later.
+                            if (++connectedPolls < OmadaPortal.CONFIRMING_POLLS) {
+                                status.setText("Signed in. Making sure it holds...");
+                                return;
+                            }
                             finishing = true;
                             handler.removeCallbacks(poll);
                             setResult(RESULT_OK);
                             finish();
                             return;
                         }
+                        connectedPolls = 0;
                         if (manual) {
                             status.setText("Not signed in yet. Finish the sign-in above,"
                                     + " then press Done again.");
                         }
+                        pressCardIfStuck();
                     }
                 });
             }

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.View;
 import android.webkit.WebView;
 
 /**
@@ -18,14 +19,28 @@ import android.webkit.WebView;
  *
  * So reviving is simply loading the portal again, out of sight, and waiting for
  * the controller to accept us - the same thing tapping OMADA does, minus the
- * person. It only works while the account login itself is still good; when that
- * has gone, nothing here helps and someone has to sign in.
+ * person. When the portal stops on its list of organizations instead of going
+ * in, the card is pressed here too, as a person would. It only works while the
+ * account login itself is still good; when that has gone, nothing here helps
+ * and someone has to sign in.
  */
 public final class OmadaReconnector {
 
     /** How long to give the portal to re-establish the session. */
     private static final long REVIVE_TIMEOUT_MS = 45000;
     private static final long POLL_MS = 3000;
+
+    /**
+     * Counted from asking for the page, not from it arriving, so this allows
+     * for the load as well as the second or two a portal that is going in by
+     * itself takes. Past it, the portal has stopped on its list.
+     */
+    private static final long PRESS_AFTER_MS = 9000;
+    private static final long PRESS_EVERY_MS = 12000;
+
+    /** Big enough to lay the organization list out; nobody ever sees it. */
+    private static final int PAGE_WIDTH = 1280;
+    private static final int PAGE_HEIGHT = 800;
 
     /** Kept between attempts: a WebView carries the page state that revives us. */
     private static WebView web;
@@ -49,8 +64,15 @@ public final class OmadaReconnector {
                 try {
                     if (web == null) {
                         web = new WebView(context.getApplicationContext());
-                        web.getSettings().setJavaScriptEnabled(true);
-                        web.getSettings().setDomStorageEnabled(true);
+                        OmadaPortal.configure(web);
+                        // Never attached to a window, so it is 0x0 unless told
+                        // otherwise, and a page that size may draw no cards.
+                        web.measure(
+                                View.MeasureSpec.makeMeasureSpec(PAGE_WIDTH,
+                                        View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(PAGE_HEIGHT,
+                                        View.MeasureSpec.EXACTLY));
+                        web.layout(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
                     }
                     web.loadUrl(OmadaSession.PORTAL_URL);
                 } catch (Exception e) {
@@ -61,7 +83,10 @@ public final class OmadaReconnector {
             }
         });
 
-        long deadline = System.currentTimeMillis() + REVIVE_TIMEOUT_MS;
+        long startedAt = System.currentTimeMillis();
+        long deadline = startedAt + REVIVE_TIMEOUT_MS;
+        long pressedAt = 0;
+        int connectedPolls = 0;
         while (System.currentTimeMillis() < deadline) {
             try {
                 Thread.sleep(POLL_MS);
@@ -71,8 +96,27 @@ public final class OmadaReconnector {
             }
             android.webkit.CookieManager.getInstance().flush();
             if (OmadaSession.isConnected()) {
-                Log.i(PrintServerService.TAG, "omada session revived");
-                return true;
+                // Twice running, as at sign-in: a single yes from the
+                // organization list would spend the sale's one retry on a
+                // session that is already gone.
+                if (++connectedPolls >= OmadaPortal.CONFIRMING_POLLS) {
+                    Log.i(PrintServerService.TAG, "omada session revived");
+                    return true;
+                }
+                continue;
+            }
+            connectedPolls = 0;
+            long now = System.currentTimeMillis();
+            if (now - startedAt >= PRESS_AFTER_MS && now - pressedAt >= PRESS_EVERY_MS) {
+                pressedAt = now;
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (web != null) {
+                            OmadaPortal.enterOrganization(web, null);
+                        }
+                    }
+                });
             }
         }
         Log.e(PrintServerService.TAG, "could not revive omada session");

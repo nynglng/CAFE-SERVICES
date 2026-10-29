@@ -148,6 +148,27 @@ errorCode -1200. `OmadaReconnector` loads the portal out of sight and retries;
 a keepalive checks every 15 minutes between sales. That only works while the
 account login holds - when TP-Link expires it, someone must sign in via OMADA.
 
+**The portal sometimes stops on its organization list** ("Cloud Based
+Systems", one CAFE card) instead of going straight into the controller, which
+it always did in August. Found on the tablet in October: the sign-in screen
+closed on its own, then the home screen said "not connected", and it only
+worked if the card was tapped before the screen closed. The list gave one
+`login: true` that was gone a moment later. The hidden reviver loads the same
+page, so it could not have healed a lapsed session there either.
+
+v1.1 (`OmadaPortal`) does what a person does: after a few seconds with no
+session it presses the card whose own text is the org name, in the sign-in
+screen and in the reviver alike. The name is
+`GET /api/v2/hotspot/maintenance/controllerName`, learned on every connected
+check, defaulting to CAFE. Both now also want `login: true` on two polls
+running before they believe it. This cost about 3s more on a sale that has to
+revive, and it is worth it: a false yes spends the sale's only retry.
+
+**Not yet seen working on the real portal.** The press was tested against a
+mock of the list. The PC's Chrome profile was signed out, so the live page was
+never watched. If it fails, logcat shows `omada org list: no card named ...` or
+`pressed ...` on each attempt, and that line says which part went wrong.
+
 When no codes can be had, the slip says "Please ask cashier for a wi-fi
 voucher" and nothing else. It must never print invented digits: they look
 exactly like real codes to a guest, who would type them, fail, and blame the

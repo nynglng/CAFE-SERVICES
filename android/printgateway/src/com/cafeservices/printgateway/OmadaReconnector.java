@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 /**
  * Bringing the Omada session back without anyone touching the phone.
@@ -65,6 +66,11 @@ public final class OmadaReconnector {
                     if (web == null) {
                         web = new WebView(context.getApplicationContext());
                         OmadaPortal.configure(web);
+                        // Without a client of its own, every redirect the
+                        // portal makes is handed to Android to open in some
+                        // other app, which from a service it cannot do - so
+                        // this page never got past its first address.
+                        web.setWebViewClient(new WebViewClient());
                         // Never attached to a window, so it is 0x0 unless told
                         // otherwise, and a page that size may draw no cards.
                         web.measure(

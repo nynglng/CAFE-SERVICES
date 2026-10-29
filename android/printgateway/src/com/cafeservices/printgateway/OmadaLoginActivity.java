@@ -41,6 +41,9 @@ public class OmadaLoginActivity extends Activity {
     /** A press that went nowhere is tried again, not hammered. */
     private static final long PRESS_EVERY_MS = 12000;
 
+    /** While this is up, the keepalive leaves the session to the person. */
+    private static volatile boolean open;
+
     private WebView web;
     private TextView status;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -54,6 +57,12 @@ public class OmadaLoginActivity extends Activity {
     private final Runnable poll = new Runnable() {
         @Override
         public void run() {
+            // Entering an organization is a route change inside the page, not
+            // a new page, so onPageFinished alone would miss the account it
+            // lands in. Asked until one is known.
+            if (Settings.accountId().length() == 0) {
+                probe(web);
+            }
             check(false);
             handler.postDelayed(this, POLL_MS);
         }
@@ -62,6 +71,7 @@ public class OmadaLoginActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        open = true;
         setContentView(R.layout.activity_login);
         setTitle("Connect Omada");
 
@@ -134,7 +144,22 @@ public class OmadaLoginActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        open = false;
         handler.removeCallbacks(poll);
+        // Closing the screen does not stop the page. Left alone it went on
+        // running the portal out of sight, one more copy per sign-in, all in
+        // the same cookie jar - and when the controller dropped one of them,
+        // the portal took it back to the organization list by itself.
+        CookieManager.getInstance().flush();
+        web.destroy();
+    }
+
+    /**
+     * Whether someone is signing in right now. A second portal loading out of
+     * sight in the same cookie jar, mid-sign-in, can only get in their way.
+     */
+    public static boolean isOpen() {
+        return open;
     }
 
     /**
@@ -147,6 +172,13 @@ public class OmadaLoginActivity extends Activity {
             return;
         }
         pressedAt = now;
+        if (Settings.orgName().length() == 0) {
+            // A gateway that has never been in cannot know which card is its
+            // own. Once it has, it remembers, and this is never asked again.
+            status.setText("Sign in. If Omada then shows a list of"
+                    + " organizations, tap yours.");
+            return;
+        }
         OmadaPortal.enterOrganization(web, new Runnable() {
             @Override
             public void run() {

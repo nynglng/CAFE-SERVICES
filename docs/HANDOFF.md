@@ -1,4 +1,4 @@
-# Handoff — 1 September 2026 (fast, and no longer freezing)
+# Handoff — 29 October 2026 (the org list, and a reviver that works)
 
 Where the project stands, so work can resume on another machine without
 re-deriving any of it.
@@ -85,9 +85,10 @@ Alignment is decided by what a value **is** — only an amount or the receipt
 number is pinned right. Rows arrive already trimmed, so trailing padding cannot
 be consulted; splitting on any wide gap threw "POS: POS 1" to opposite edges.
 
-`calibrate()` logs our type widths against real measurements. It currently
-reads `upper15=200 (real 197)` and `upper19=287 (real 286)` — within a pixel or
-three, so our type matches Loyverse's. If it ever drifts far, that log is the
+`calibrate()` logs our type widths against a real measurement. It currently
+reads `upper19=287 (real 286)`, within a pixel, so our type matches Loyverse's.
+(A second reference measured the cafe's own name; it went when the repo was
+made public.) If it ever drifts far, that log is the
 first place to look. Note the references must cite strings that can actually
 appear unbroken on 58mm paper; an earlier pair came from an 80mm capture and
 made the type look 46px too wide when nothing was wrong.
@@ -148,26 +149,60 @@ errorCode -1200. `OmadaReconnector` loads the portal out of sight and retries;
 a keepalive checks every 15 minutes between sales. That only works while the
 account login holds - when TP-Link expires it, someone must sign in via OMADA.
 
-**The portal sometimes stops on its organization list** ("Cloud Based
-Systems", one CAFE card) instead of going straight into the controller, which
-it always did in August. Found on the tablet in October: the sign-in screen
-closed on its own, then the home screen said "not connected", and it only
-worked if the card was tapped before the screen closed. The list gave one
-`login: true` that was gone a moment later. The hidden reviver loads the same
-page, so it could not have healed a lapsed session there either.
+**The portal opens wherever the account was last** - inside the
+organization, or on its list of them (`#/orgManager`, "Cloud Based Systems",
+one card per organization). In August it was always inside. The account
+remembers this, not the device, so leaving the list up in any browser changes
+where the tablet lands next time. Also seen on the phone: a live page whose
+controller session dies goes back to the list by itself. Found on the tablet
+in October: the sign-in screen closed on its own, the home screen then said
+"not connected", and it only worked if the card was tapped before the screen
+closed.
 
-v1.1 (`OmadaPortal`) does what a person does: after a few seconds with no
+v1.1 (`OmadaPortal`) does what a person does there. After a few seconds with no
 session it presses the card whose own text is the org name, in the sign-in
-screen and in the reviver alike. The name is
-`GET /api/v2/hotspot/maintenance/controllerName`, learned on every connected
-check, defaulting to CAFE. Both now also want `login: true` on two polls
-running before they believe it. This cost about 3s more on a sale that has to
-revive, and it is worth it: a false yes spends the sale's only retry.
+screen and in the reviver alike. The name comes from
+`GET /api/v2/hotspot/maintenance/controllerName` and is learned on every
+connected check. A gateway that has never been in cannot know its card, so on
+the first sign-in the screen asks the person to tap it. Both also want
+`login: true` on two polls running before they believe it. That costs about 3s
+on a sale that has to revive, and it is worth it, because a false yes spends
+the sale's only retry.
 
-**Not yet seen working on the real portal.** The press was tested against a
-mock of the list. The PC's Chrome profile was signed out, so the live page was
-never watched. If it fails, logcat shows `omada org list: no card named ...` or
-`pressed ...` on each attempt, and that line says which part went wrong.
+Three more faults, found by watching the phone rather than by reading code:
+
+- **The reviver had never worked.** Its WebView had no `WebViewClient`, so
+  every redirect the portal made was handed to Android to open in another
+  app. From a service that fails (`Cannot call startActivity on non-activity
+  context`), and the page never got past its first address.
+- **Each sign-in left a portal running.** Finishing the screen did not stop its
+  WebView, so every Connect added another hidden copy of the portal sharing the
+  cookie jar. Three were seen at once. `onDestroy` now destroys it.
+- **The keepalive revived during sign-in** and before anyone had signed in,
+  loading a second portal next to the one the person was using. It now waits.
+
+**Proven on the phone (OPPO CPH1937) on 29 October**, from a fresh install with
+nothing compiled in:
+
+- first sign-in learned the account, the site and the org name by itself;
+- with the portal remembering the inside, reopening Connect closed once the
+  session held;
+- landing on the list with a dead controller session, the screen logged
+  `omada org list: "pressed <org name> (1 on page)"`, went in, and closed connected;
+- with the sign-in closed and the session killed behind it, the keepalive
+  revived out of sight: it landed on the list, pressed the card, and logged
+  `omada session revived` 16s after starting.
+
+A dead session was simulated by swapping `TPOMADA_SESSIONID` for a made-up
+value over WebView DevTools. That needed a temporary build with
+`WebView.setWebContentsDebuggingEnabled(true)`. Never ship that build: anyone
+with adb could read the session out of it.
+
+**Nothing about one client is compiled in any more.** No account, site,
+organization or Wi-Fi name is assumed: whichever Omada account signs in is the
+one vouchers are made in, and the Wi-Fi line is left off the slip until a name
+is typed under Printer. Installs that were already signed in keep what they
+learned. The PC tools read the account and site from `.env`.
 
 When no codes can be had, the slip says "Please ask cashier for a wi-fi
 voucher" and nothing else. It must never print invented digits: they look
@@ -349,11 +384,15 @@ which is the proof that chunked RFCOMM writes deliver what was encoded.
 
 ## Open, in the order it matters
 
-1. **Take the gateway back to the cafe tablet.** Everything above was proven
-   on Irene's OPPO phone. The tablet is a different device with a different
-   skin, and its menus will not match - but it is where the original complaint
-   came from. Install v4, grant **Display over other apps**, then run
-   `tools/watch-gateway.mjs` and leave it idle before trusting it.
+1. **Put v1.1 on the cafe tablet.** The org-list fix was proven on the OPPO
+   phone, not on the tablet. An APK signed by a different PC's debug key will
+   not install over the one already there (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`),
+   and uninstalling to get past that deletes `jobs/`, the Omada sign-in and the
+   printer settings. So every release must be built with the same
+   `debug.keystore`. Copy that file between PCs by hand; it is gitignored, and
+   must stay out of the repo. After installing, grant **Display over other
+   apps**, then run `tools/watch-gateway.mjs` and leave it idle before
+   trusting it.
 2. **Multi-voucher spacing has never been on paper.** Two codes render
    correctly - see the 33mm slip in `captures/` - but nothing above one voucher
    has been physically printed.

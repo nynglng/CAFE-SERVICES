@@ -300,6 +300,11 @@ public class PrintServerService extends Service {
             if (!running) {
                 return;
             }
+            // Nobody has signed in on this install yet, or someone is doing
+            // it now: either way there is nothing out of sight to revive.
+            if (Settings.accountId().length() == 0 || OmadaLoginActivity.isOpen()) {
+                continue;
+            }
             if (!OmadaSession.isConnected()) {
                 OmadaReconnector.revive(this);
             }
